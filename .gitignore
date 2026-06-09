@@ -4,3 +4,5 @@ data.db
 data.db.bak
 _unpacked/
 _specs.txt
+.claude/
+*.bak

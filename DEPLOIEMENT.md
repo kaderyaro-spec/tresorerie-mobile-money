@@ -1,62 +1,72 @@
-# Mettre l'application en ligne (synchronisation multi-appareils)
+# Mettre l'application en ligne sur Render (lien partageable)
 
-Une fois en ligne, tu obtiens **une adresse web** que tu ouvres sur tous tes
-appareils (téléphone, tablette, autre PC), même en 4G et même PC éteint. Tous
-partagent **le même compte et les mêmes données**, protégés par ton code PIN.
+Objectif : obtenir un lien fixe du type `https://tresorerie-mobile-money.onrender.com`,
+accessible 24h/24 (même PC éteint), à envoyer à tes testeurs.
 
-> ⚠️ **Avant de mettre en ligne : définis ton code PIN** dans
-> Réglages → « Code de connexion ». Sans lui, tes données seraient publiques.
+> ⚠️ **Avant de partager le lien**, ouvre l'app en ligne, fais l'onboarding,
+> puis définis ton **code PIN** (Réglages → Code de connexion). Sans lui, les
+> données seraient ouvertes à tous.
+>
+> 👥 L'app gère **un seul compte** (limite du MVP) : tous les testeurs partagent
+> les mêmes données. Idéal pour des retours d'usage, pas pour des comptes séparés.
 
----
-
-## Le point important : la persistance des données
-
-Une app de trésorerie ne doit **jamais perdre ses données**. Or, les
-hébergements gratuits ne gardent pas tous le fichier de base (`data.db`) :
-
-| Hébergeur | Gratuit | Garde les données ? | Mise en ligne |
-|---|---|---|---|
-| **PythonAnywhere** | ✅ Oui | ✅ **Oui** (disque persistant) | Upload des fichiers (je te guide) |
-| **Render** | ✅ Oui | ❌ Non sur l'offre gratuite (perte au redémarrage) | Connexion GitHub (très simple) |
-| **Render + disque** | 💵 ~7 $/mois | ✅ Oui | Connexion GitHub |
-
-➡️ **Recommandation : PythonAnywhere** — gratuit ET conserve les données. C'est
-le meilleur compromis pour ce projet.
+Le code est **déjà prêt** : dépôt Git initialisé, `render.yaml`, `Procfile`,
+`requirements.txt` (avec gunicorn). Il reste 3 étapes.
 
 ---
 
-## Option A — PythonAnywhere (recommandée, gratuite, données conservées)
+## Étape 1 — Mettre le code sur GitHub
 
-1. Crée un compte gratuit sur **https://www.pythonanywhere.com** (offre « Beginner »).
-2. Onglet **Files** → crée un dossier `tresorerie` → téléverse tous les fichiers
-   du projet (sauf `data.db`, `__pycache__`, `*.bak`).
-3. Onglet **Web** → *Add a new web app* → **Manual configuration** → **Python 3.x**.
-4. Dans la config WSGI, pointe vers `app.py` (variable `application = app`).
-   *(je te fournis le fichier WSGI exact au moment venu)*
-5. Onglet **Consoles** → installe Flask : `pip install --user Flask`.
-6. Définis la variable d'environnement `SECRET_KEY` (une longue phrase secrète).
-7. Clique **Reload**. Ton app est en ligne sur `https://TONNOM.pythonanywhere.com`.
+1. Crée un compte gratuit sur **https://github.com** (si tu n'en as pas).
+2. Clique sur **New repository** (bouton vert).
+   - Nom : `tresorerie-mobile-money`
+   - Laisse-le **vide** (ne coche PAS « Add a README »).
+   - Clique **Create repository**.
+3. Copie l'adresse du dépôt affichée, du type :
+   `https://github.com/TON-COMPTE/tresorerie-mobile-money.git`
+4. Donne-moi cette adresse : je lance l'envoi du code (ou tu exécutes toi-même) :
+   ```
+   git remote add origin https://github.com/TON-COMPTE/tresorerie-mobile-money.git
+   git branch -M main
+   git push -u origin main
+   ```
+   Au push, une fenêtre de connexion GitHub s'ouvre dans le navigateur → connecte-toi
+   pour autoriser. (Une seule fois.)
 
-## Option B — Render (mise en ligne la plus simple, mais données non conservées en gratuit)
+## Étape 2 — Déployer sur Render
 
-1. Mets le code sur **GitHub** (je peux t'aider à créer le dépôt).
-2. Sur **https://render.com** → *New Web App* → connecte le dépôt GitHub.
-3. Render détecte le `Procfile` (déjà présent) : `gunicorn app:app`.
-4. Ajoute la variable d'environnement `SECRET_KEY`.
-5. Déploie. Adresse fournie : `https://ton-app.onrender.com`.
-6. ⚠️ Pour conserver les données : ajoute un **disque persistant** (payant) et
-   règle la variable `DB_PATH` vers ce disque (ex. `/var/data/data.db`).
+1. Crée un compte gratuit sur **https://render.com** → choisis **« Sign in with GitHub »**
+   (le plus simple, ça relie directement ton GitHub).
+2. Tableau de bord Render → **New +** → **Blueprint**.
+3. Sélectionne le dépôt `tresorerie-mobile-money`.
+4. Render détecte le fichier `render.yaml` et propose le service tout configuré
+   (clé secrète générée automatiquement). Clique **Apply** / **Create**.
+5. Render installe et démarre l'app (2–4 minutes la première fois).
+
+## Étape 3 — Récupérer et partager le lien
+
+1. Quand le statut passe à **Live**, Render affiche l'URL en haut, du type
+   `https://tresorerie-mobile-money.onrender.com`.
+2. Ouvre-la, fais l'onboarding, **définis ton code PIN**.
+3. Partage le lien (et le code PIN si tu veux que les testeurs entrent) à tes testeurs.
+4. Sur leur téléphone : ouvrir le lien dans **Chrome** → menu → **« Ajouter à
+   l'écran d'accueil »** pour l'installer comme une app.
 
 ---
 
-## Fichiers déjà prêts pour le déploiement
+## À savoir sur l'offre gratuite Render
 
-- `requirements.txt` — dépendances (Flask + gunicorn)
-- `Procfile` — commande de démarrage pour l'hébergeur
-- `.gitignore` — exclut la base de données et les fichiers temporaires
-- Variables d'environnement supportées : `SECRET_KEY`, `DB_PATH`
+- 😴 **Mise en veille** : après ~15 min sans visite, l'app s'endort. La visite
+  suivante la réveille en ~30 secondes (un petit temps de chargement, puis normal).
+- 💾 **Données** : l'offre gratuite peut réinitialiser la base au redémarrage du
+  serveur. Acceptable pour une phase de test. Pour conserver durablement les
+  données, on passera plus tard à un disque persistant (payant) ou à PythonAnywhere.
 
-## Installer l'app sur le téléphone (après mise en ligne)
+## Mettre à jour l'app en ligne plus tard
 
-Ouvre l'adresse web dans **Chrome** sur le téléphone → menu → **« Ajouter à
-l'écran d'accueil »**. L'app s'installe et se lance comme une application native.
+À chaque modification, il suffit de renvoyer le code : Render redéploie tout seul.
+```
+git add -A
+git commit -m "Description des changements"
+git push
+```

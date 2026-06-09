@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% from "_macros.html" import op_logo %}
+{% block title %}Bilan de clôture{% endblock %}
+{% block header %}Bilan du {{ cl.date }}{% endblock %}
+
+{% block content %}
+<div class="total-banner">
+    <span class="total-label">Commissions totales de la journée</span>
+    <span class="total-value">{{ total_commission | fcfa }} <small>FCFA</small></span>
+</div>
+
+<section class="block card-form">
+    <h2>💰 Commissions par opérateur</h2>
+    <table class="comm-table">
+        {% for l in lines %}
+            {% if l.kind == 'wallet' %}
+            <tr>
+                <td><span class="op-name">{{ op_logo(l.label, 24) }} {{ l.label }}</span></td>
+                <td class="comm-val">{{ l.commission | fcfa }} FCFA</td>
+            </tr>
+            {% endif %}
+        {% endfor %}
+        <tr class="comm-total">
+            <td>Total</td>
+            <td class="comm-val">{{ total_commission | fcfa }} FCFA</td>
+        </tr>
+    </table>
+</section>
+
+<section class="block card-form">
+    <h2>📊 Écarts constatés</h2>
+    <table class="cloture-table">
+        <colgroup><col style="width:32%"><col style="width:21%"><col style="width:21%"><col style="width:26%"></colgroup>
+        <thead>
+            <tr><th>Ligne</th><th>Théorique</th><th>Réel</th><th class="th-ecart">Écart</th></tr>
+        </thead>
+        <tbody>
+        {% for l in lines %}
+            <tr>
+                <td><span class="op-name">{% if l.kind == 'wallet' %}{{ op_logo(l.label, 22) }} {% endif %}{{ l.label }}</span></td>
+                <td class="theo">{{ l.theorique | fcfa }}</td>
+                <td>{{ l.reel | fcfa }}</td>
+                <td class="ecart-cell {% if l.ecart < 0 %}ecart-neg{% elif l.ecart > 0 %}ecart-pos{% endif %}">
+                    {% if l.ecart > 0 %}+{% endif %}{{ l.ecart | fcfa }}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% if total_ecart != 0 %}
+    <p class="hint">⚠️ Écart global de la journée : <strong>{{ total_ecart | fcfa }} FCFA</strong>.</p>
+    {% else %}
+    <p class="hint">✅ Aucun écart : tous les soldes correspondent.</p>
+    {% endif %}
+</section>
+
+<a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-block">Retour à l'accueil</a>
+{% endblock %}

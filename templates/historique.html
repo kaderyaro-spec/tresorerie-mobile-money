@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "_macros.html" import op_logo %}
+{% block title %}Historique{% endblock %}
+{% block header %}Historique{% endblock %}
+
+{% block content %}
+<form method="get" class="filters">
+    <select name="jour" onchange="this.form.submit()">
+        <option value="">Tous les jours</option>
+        {% for j in jours %}
+        <option value="{{ j.business_day }}" {% if f_jour == j.business_day %}selected{% endif %}>{{ j.business_day }}</option>
+        {% endfor %}
+    </select>
+    <select name="wallet" onchange="this.form.submit()">
+        <option value="">Tous opérateurs</option>
+        {% for w in wallets %}
+        <option value="{{ w.id }}" {% if f_wallet == w.id|string %}selected{% endif %}>{{ w.operator }}</option>
+        {% endfor %}
+    </select>
+    <select name="type" onchange="this.form.submit()">
+        <option value="">Tous types</option>
+        {% for key, t in tx_types.items() %}
+        <option value="{{ key }}" {% if f_type == key %}selected{% endif %}>{{ t.label }}</option>
+        {% endfor %}
+    </select>
+</form>
+
+{% if txs %}
+<ul class="tx-list">
+    {% for t in txs %}
+    <li class="tx-item">
+        <div class="tx-main">
+            <div class="tx-left">
+                {{ op_logo(t.operator, 32) if t.operator else '' }}
+                <span class="tx-type">{{ tx_types[t.type].label }}</span>
+            </div>
+            <span class="tx-amount {% if tx_types[t.type].cash < 0 %}neg{% else %}pos{% endif %}">
+                {{ t.amount | fcfa }} FCFA
+            </span>
+        </div>
+        <div class="tx-meta">
+            <span>{{ t.operator or 'Caisse' }}</span>
+            <span>{{ t.created_at }}</span>
+            {% if t.commission and t.commission > 0 %}<span>Comm. {{ t.commission | fcfa }}</span>{% endif %}
+        </div>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p class="empty">Aucune transaction pour ces filtres.</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,24 @@
+DOSSIER DES LOGOS OPÉRATEURS
+============================
+
+Dépose ici les vrais fichiers logos des opérateurs. Ils apparaîtront
+automatiquement dans toute l'application (accueil, saisie, clôture, etc.).
+Tant qu'un fichier est absent, une pastille colorée s'affiche à la place.
+
+NOMS DE FICHIERS ATTENDUS (exactement, en minuscules) :
+
+    orange-money.png      (ou .svg / .webp / .jpg)
+    moov-money.png
+    wave.png
+    mtn.png
+    credit.png
+    factures.png
+
+CONSEILS :
+- Format carré de préférence (ex. 200x200 px), fond transparent (PNG/SVG).
+- Le logo est affiché dans un cercle ; un visuel carré ou rond rend mieux.
+- Utilise les logos officiels uniquement si tu es autorisé à les employer
+  (agent/partenaire de l'opérateur).
+
+Après avoir ajouté/retiré un fichier, rafraîchis la page : c'est pris en
+compte immédiatement (pas besoin de redémarrer l'application).

@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% from "_macros.html" import op_logo %}
+{% block title %}Nouvelle transaction{% endblock %}
+{% block header %}Nouvelle transaction{% endblock %}
+
+{% block content %}
+<form method="post" class="card-form" id="tx-form">
+    <input type="hidden" name="type" id="tx-type" required>
+
+    <section class="block">
+        <h2>1. Type d'opération</h2>
+        <div class="choice-grid">
+            <button type="button" class="choice" data-type="depot_client" data-wallet="1">
+                <span class="choice-ico">⬇️</span>Dépôt client
+            </button>
+            <button type="button" class="choice" data-type="retrait_client" data-wallet="1">
+                <span class="choice-ico">⬆️</span>Retrait client
+            </button>
+            <button type="button" class="choice" data-type="depense" data-wallet="0">
+                <span class="choice-ico">🧾</span>Dépense
+            </button>
+            <a href="{{ url_for('reappro') }}" class="choice choice-link">
+                <span class="choice-ico">🔄</span>Réappro
+            </a>
+        </div>
+    </section>
+
+    <section class="block" id="wallet-block" hidden>
+        <h2>2. Opérateur</h2>
+        <div class="choice-grid">
+            {% for w in s.wallets %}
+            <button type="button" class="choice op-choice" data-wallet-id="{{ w.id }}">
+                {{ op_logo(w.operator, 34) }}
+                {{ w.operator }}
+                <small>{{ w.balance | fcfa }} FCFA</small>
+            </button>
+            {% endfor %}
+        </div>
+        <input type="hidden" name="wallet_id" id="wallet-id">
+    </section>
+
+    <section class="block">
+        <h2 id="amount-step">3. Montant</h2>
+        <input type="number" name="amount" id="amount" inputmode="numeric"
+               class="big-input" placeholder="0" min="1" required>
+        <label class="lbl-mt">Commission (optionnel)</label>
+        <input type="number" name="commission" id="commission" inputmode="numeric"
+               class="med-input" placeholder="0" min="0">
+        <p class="hint" id="commission-hint"></p>
+    </section>
+
+    <div class="form-actions">
+        <a href="{{ url_for('dashboard') }}" class="btn btn-outline">Annuler</a>
+        <button type="submit" class="btn btn-primary" id="submit-btn" disabled>Enregistrer</button>
+    </div>
+</form>
+
+<script>
+(function () {
+    var typeInput = document.getElementById('tx-type');
+    var walletBlock = document.getElementById('wallet-block');
+    var walletIdInput = document.getElementById('wallet-id');
+    var commissionHint = document.getElementById('commission-hint');
+    var commissionField = document.getElementById('commission');
+    var submitBtn = document.getElementById('submit-btn');
+    var needsWallet = false;
+
+    function refreshSubmit() {
+        var ok = typeInput.value && (!needsWallet || walletIdInput.value);
+        submitBtn.disabled = !ok;
+    }
+
+    document.querySelectorAll('.choice[data-type]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.choice[data-type]').forEach(function (b) { b.classList.remove('selected'); });
+            btn.classList.add('selected');
+            typeInput.value = btn.dataset.type;
+            needsWallet = btn.dataset.wallet === '1';
+            walletBlock.hidden = !needsWallet;
+            if (!needsWallet) { walletIdInput.value = ''; }
+            // commission seulement pour les transactions clients
+            var isClient = btn.dataset.type === 'depot_client' || btn.dataset.type === 'retrait_client';
+            commissionField.parentNode.querySelector('.lbl-mt').style.display = isClient ? '' : 'none';
+            commissionField.style.display = isClient ? '' : 'none';
+            commissionHint.textContent = isClient ? 'Renseignez votre commission si vous la connaissez.' : '';
+            refreshSubmit();
+        });
+    });
+
+    document.querySelectorAll('.op-choice').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.op-choice').forEach(function (b) { b.classList.remove('selected'); });
+            btn.classList.add('selected');
+            walletIdInput.value = btn.dataset.walletId;
+            refreshSubmit();
+        });
+    });
+})();
+</script>
+{% endblock %}

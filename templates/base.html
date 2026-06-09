@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0d6e5c">
+    <title>{% block title %}Trésorerie Mobile Money{% endblock %}</title>
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header class="topbar">
+        <span class="topbar-title">{% block header %}Trésorerie{% endblock %}</span>
+        {% block topbar_right %}{% endblock %}
+    </header>
+
+    <main class="content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-zone">
+                {% for category, msg in messages %}
+                    <div class="flash flash-{{ category }}">{{ msg }}</div>
+                {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    {% block nav %}
+    <nav class="bottomnav">
+        <a href="{{ url_for('dashboard') }}" class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">
+            <span class="nav-ico">🏠</span><span>Accueil</span>
+        </a>
+        <a href="{{ url_for('historique') }}" class="nav-item {% if request.endpoint == 'historique' %}active{% endif %}">
+            <span class="nav-ico">📋</span><span>Historique</span>
+        </a>
+        <a href="{{ url_for('transaction') }}" class="nav-item nav-fab">
+            <span class="nav-ico">＋</span>
+        </a>
+        <a href="{{ url_for('cloture') }}" class="nav-item {% if request.endpoint == 'cloture' %}active{% endif %}">
+            <span class="nav-ico">🔒</span><span>Clôture</span>
+        </a>
+        <a href="{{ url_for('parametres') }}" class="nav-item {% if request.endpoint == 'parametres' %}active{% endif %}">
+            <span class="nav-ico">⚙️</span><span>Réglages</span>
+        </a>
+    </nav>
+    {% endblock %}
+
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register("{{ url_for('static', filename='sw.js') }}");
+      }
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

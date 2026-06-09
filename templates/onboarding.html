@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% from "_macros.html" import op_logo %}
+{% block title %}Configuration — Trésorerie{% endblock %}
+{% block header %}Bienvenue 👋{% endblock %}
+{% block nav %}{% endblock %}
+
+{% block content %}
+<form method="post" class="card-form" id="onboarding-form">
+    <p class="intro">Configurons votre point marchand en moins de 3 minutes.</p>
+
+    <section class="block">
+        <h2>1. Votre numéro</h2>
+        <label>Numéro de téléphone</label>
+        <input type="tel" name="phone" inputmode="tel" placeholder="Ex : 70 00 00 00" required>
+        <p class="hint">Un code de vérification (OTP) vous sera envoyé dans la version finale.</p>
+    </section>
+
+    <section class="block">
+        <h2>2. Vos opérateurs</h2>
+        <p class="hint">Cochez les services que vous gérez. Saisissez le solde d'UV de départ et le seuil d'alerte.</p>
+        {% for op in operateurs %}
+        <div class="op-row">
+            <label class="op-check">
+                <input type="checkbox" name="operators" value="{{ op }}" class="op-toggle" data-op="{{ op }}">
+                {{ op_logo(op, 30) }}
+                <span>{{ op }}</span>
+            </label>
+            <div class="op-fields" id="fields-{{ op }}" hidden>
+                <div class="field-inline">
+                    <label>Solde UV</label>
+                    <input type="number" name="solde_{{ op }}" inputmode="numeric" placeholder="0" min="0">
+                </div>
+                <div class="field-inline">
+                    <label>Seuil alerte</label>
+                    <input type="number" name="seuil_{{ op }}" inputmode="numeric" placeholder="0" min="0">
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </section>
+
+    <section class="block">
+        <h2>3. Votre caisse</h2>
+        <label>Solde de caisse (espèces) de départ</label>
+        <input type="number" name="cash_initial" inputmode="numeric" placeholder="0" min="0">
+    </section>
+
+    <section class="block">
+        <h2>4. Code de connexion</h2>
+        <label>Choisissez un code (au moins 4 chiffres)</label>
+        <input type="password" name="pin" inputmode="numeric" pattern="[0-9]*"
+               placeholder="••••" minlength="4" required>
+        <p class="hint">Ce code protège l'accès à vos données. Ne le partagez pas.</p>
+    </section>
+
+    <button type="submit" class="btn btn-primary btn-block">Créer mon compte</button>
+</form>
+
+<script>
+document.querySelectorAll('.op-toggle').forEach(function (cb) {
+    cb.addEventListener('change', function () {
+        var f = document.getElementById('fields-' + this.dataset.op);
+        f.hidden = !this.checked;
+    });
+});
+</script>
+{% endblock %}

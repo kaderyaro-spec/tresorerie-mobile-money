@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Connexion{% endblock %}
+{% block header %}Connexion{% endblock %}
+{% block nav %}{% endblock %}
+
+{% block content %}
+<form method="post" class="card-form login-form">
+    <div class="login-logo">🔒</div>
+    <h2>Entrez votre code</h2>
+    <p class="hint">Saisissez le code de connexion de votre compte.</p>
+    <input type="password" name="pin" inputmode="numeric" pattern="[0-9]*"
+           class="big-input" placeholder="••••" autofocus required>
+    <button type="submit" class="btn btn-primary btn-block">Se connecter</button>
+</form>
+{% endblock %}

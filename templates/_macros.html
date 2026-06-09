@@ -1,0 +1,13 @@
+{# Badge visuel d'un opérateur.
+   - Si un vrai fichier logo est présent dans static/logos/, on l'affiche.
+   - Sinon, repli sur une pastille colorée avec initiales.
+   Usage : {% from "_macros.html" import op_logo %}  puis  {{ op_logo("Wave") }} #}
+{% macro op_logo(name, size=38) %}
+    {% set s = op_style(name) %}
+    {% if s.logo %}
+        <img class="op-logo op-logo-img" src="{{ url_for('static', filename=s.logo) }}"
+             alt="{{ name }}" style="width:{{ size }}px;height:{{ size }}px">
+    {% else %}
+        <span class="op-logo" style="background:{{ s.bg }};color:{{ s.fg }};width:{{ size }}px;height:{{ size }}px;font-size:{{ (size * 0.36) | round | int }}px">{{ s.short }}</span>
+    {% endif %}
+{% endmacro %}

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% from "_macros.html" import op_logo %}
+{% block title %}Paramètres{% endblock %}
+{% block header %}Paramètres{% endblock %}
+
+{% block content %}
+<form method="post" class="block card-form">
+    <input type="hidden" name="action" value="account">
+    <h2>Compte</h2>
+    <p class="param-line"><span>Identifiant</span><strong>#{{ "%04d"|format(agent.id) }}</strong></p>
+    <label>Nom de la boutique</label>
+    <input type="text" name="shop_name" value="{{ agent.shop_name or '' }}" placeholder="Ex : Kiosque Wend-Konta">
+    <label class="lbl-mt">Numéro de téléphone</label>
+    <input type="tel" name="phone" value="{{ agent.phone }}" required>
+    <p class="param-line"><span>Abonnement</span><strong>{{ agent.subscription_status }}</strong></p>
+    <p class="param-line"><span>Journée en cours</span><strong>{{ agent.business_day }}</strong></p>
+    <button type="submit" class="btn btn-primary btn-block">Enregistrer le compte</button>
+</form>
+
+<form method="post" class="block card-form">
+    <input type="hidden" name="action" value="seuils">
+    <h2>Seuils d'alerte d'UV</h2>
+    {% for w in wallets %}
+    <div class="field-inline">
+        <label>{{ w.operator }}</label>
+        <input type="number" name="seuil_{{ w.id }}" inputmode="numeric" value="{{ w.alert_threshold | round(0,'floor') | int }}">
+    </div>
+    {% endfor %}
+    <button type="submit" class="btn btn-primary btn-block">Enregistrer les seuils</button>
+</form>
+
+<section class="block card-form">
+    <h2>Opérateurs suivis</h2>
+    {% for w in wallets %}
+    <div class="param-line">
+        <span class="op-name">{{ op_logo(w.operator, 30) }} {{ w.operator }}</span>
+        <form method="post" onsubmit="return confirm('Retirer {{ w.operator }} du suivi ?');">
+            <input type="hidden" name="action" value="remove_operator">
+            <input type="hidden" name="wallet_id" value="{{ w.id }}">
+            <button type="submit" class="btn-del">Retirer</button>
+        </form>
+    </div>
+    {% endfor %}
+
+    {% if dispo %}
+    <form method="post" class="add-op">
+        <input type="hidden" name="action" value="add_operator">
+        <h3>Ajouter un opérateur</h3>
+        <select name="new_operator" required>
+            <option value="">— Choisir —</option>
+            {% for op in dispo %}<option value="{{ op }}">{{ op }}</option>{% endfor %}
+        </select>
+        <div class="field-inline">
+            <label>Solde UV</label>
+            <input type="number" name="new_opening" inputmode="numeric" placeholder="0">
+        </div>
+        <div class="field-inline">
+            <label>Seuil alerte</label>
+            <input type="number" name="new_seuil" inputmode="numeric" placeholder="0">
+        </div>
+        <button type="submit" class="btn btn-secondary btn-block">Ajouter</button>
+    </form>
+    {% endif %}
+</section>
+
+<form method="post" class="block card-form">
+    <input type="hidden" name="action" value="set_pin">
+    <h2>🔒 Code de connexion</h2>
+    <p class="hint">
+        {% if agent.pin_hash %}Modifiez votre code d'accès.{% else %}Aucun code défini. Ajoutez-en un avant de mettre l'app en ligne.{% endif %}
+    </p>
+    <input type="password" name="pin" inputmode="numeric" pattern="[0-9]*"
+           placeholder="Nouveau code (4 chiffres min.)" minlength="4">
+    <button type="submit" class="btn btn-secondary btn-block">Enregistrer le code</button>
+</form>
+
+<form method="post" action="{{ url_for('logout') }}" class="block">
+    <button type="submit" class="btn btn-outline btn-block">Se déconnecter</button>
+</form>
+{% endblock %}

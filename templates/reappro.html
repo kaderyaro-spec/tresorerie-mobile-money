@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% from "_macros.html" import op_logo %}
+{% block title %}Réapprovisionnement{% endblock %}
+{% block header %}Réapprovisionnement{% endblock %}
+
+{% block content %}
+<form method="post" class="card-form" id="reappro-form">
+    <input type="hidden" name="type" id="re-type" required>
+
+    <section class="block">
+        <h2>1. Type de mouvement</h2>
+        <div class="choice-grid choice-grid-1">
+            <button type="button" class="choice" data-type="achat_float" data-wallet="1">
+                <span class="choice-ico">📲</span>Achat d'UV <small>caisse → UV opérateur</small>
+            </button>
+            <button type="button" class="choice" data-type="depot_caisse" data-wallet="0">
+                <span class="choice-ico">➕</span>Dépôt d'espèces en caisse
+            </button>
+            <button type="button" class="choice" data-type="retrait_caisse" data-wallet="0">
+                <span class="choice-ico">➖</span>Retrait d'espèces de la caisse
+            </button>
+        </div>
+    </section>
+
+    <section class="block" id="wallet-block" hidden>
+        <h2>2. Opérateur</h2>
+        <div class="choice-grid">
+            {% for w in s.wallets %}
+            <button type="button" class="choice op-choice" data-wallet-id="{{ w.id }}">
+                {{ op_logo(w.operator, 34) }}
+                {{ w.operator }}
+                <small>{{ w.balance | fcfa }} FCFA</small>
+            </button>
+            {% endfor %}
+        </div>
+        <input type="hidden" name="wallet_id" id="wallet-id">
+    </section>
+
+    <section class="block">
+        <h2>Montant</h2>
+        <input type="number" name="amount" id="amount" inputmode="numeric"
+               class="big-input" placeholder="0" min="1" required>
+    </section>
+
+    <div class="form-actions">
+        <a href="{{ url_for('dashboard') }}" class="btn btn-outline">Annuler</a>
+        <button type="submit" class="btn btn-primary" id="submit-btn" disabled>Enregistrer</button>
+    </div>
+</form>
+
+<script>
+(function () {
+    var typeInput = document.getElementById('re-type');
+    var walletBlock = document.getElementById('wallet-block');
+    var walletIdInput = document.getElementById('wallet-id');
+    var submitBtn = document.getElementById('submit-btn');
+    var needsWallet = false;
+
+    function refreshSubmit() {
+        submitBtn.disabled = !(typeInput.value && (!needsWallet || walletIdInput.value));
+    }
+    document.querySelectorAll('.choice[data-type]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.choice[data-type]').forEach(function (b) { b.classList.remove('selected'); });
+            btn.classList.add('selected');
+            typeInput.value = btn.dataset.type;
+            needsWallet = btn.dataset.wallet === '1';
+            walletBlock.hidden = !needsWallet;
+            if (!needsWallet) { walletIdInput.value = ''; }
+            refreshSubmit();
+        });
+    });
+    document.querySelectorAll('.op-choice').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.op-choice').forEach(function (b) { b.classList.remove('selected'); });
+            btn.classList.add('selected');
+            walletIdInput.value = btn.dataset.walletId;
+            refreshSubmit();
+        });
+    });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% from "_macros.html" import op_logo %}
+{% block title %}Tableau de bord{% endblock %}
+{% block header %}{{ s.agent.shop_name or "Ma trésorerie" }}{% endblock %}
+
+{% block content %}
+<div class="total-banner" id="solde-banner">
+    <span class="total-label">Fond de roulement</span>
+    <div class="total-value-row">
+        <span class="total-value"><span class="masquable" data-clear="{{ s.total | fcfa }}">{{ s.total | fcfa }}</span> <small>FCFA</small></span>
+        <button type="button" id="toggle-solde" class="eye-inline" aria-label="Masquer ou afficher le solde">
+            <span class="eye-wrap"><span class="eye-glyph">👁</span></span>
+        </button>
+    </div>
+    <div class="total-sub">
+        <span>💵 Caisse : <span class="masquable" data-clear="{{ s.cash | fcfa }}">{{ s.cash | fcfa }}</span></span>
+    </div>
+</div>
+
+{% if s.nb_alertes > 0 %}
+<div class="alert-bar">⚠️ {{ s.nb_alertes }} portefeuille(s) sous le seuil d'alerte</div>
+{% endif %}
+
+<div class="cards">
+    <div class="card card-cash">
+        <span class="card-op">💵 Caisse (espèces)</span>
+        <span class="card-bal">{{ s.cash | fcfa }} <small>FCFA</small></span>
+    </div>
+
+    {% for w in s.wallets %}
+    <div class="card card-{{ w.voyant }}">
+        <span class="voyant voyant-{{ w.voyant }}"></span>
+        <div class="card-head">
+            {{ op_logo(w.operator) }}
+            <span class="card-op">{{ w.operator }}</span>
+        </div>
+        <span class="card-bal"><span class="masquable" data-clear="{{ w.balance | fcfa }} ">{{ w.balance | fcfa }} </span><small>FCFA</small></span>
+        {% if w.threshold > 0 %}
+        <span class="card-seuil">Seuil : {{ w.threshold | fcfa }}</span>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+<div class="actions-grid">
+    <a href="{{ url_for('transaction') }}" class="btn btn-primary btn-action">＋ Nouvelle transaction</a>
+    <a href="{{ url_for('reappro') }}" class="btn btn-secondary btn-action">🔄 Réapprovisionner</a>
+    <a href="{{ url_for('cloture') }}" class="btn btn-outline btn-action">🔒 Clôturer la journée</a>
+    <a href="{{ url_for('historique') }}" class="btn btn-outline btn-action">📋 Historique</a>
+</div>
+
+<script>
+(function () {
+    var KEY = 'masquerSolde';
+    var btn = document.getElementById('toggle-solde');
+    var wrap = btn.querySelector('.eye-wrap');
+    var spans = document.querySelectorAll('.masquable');
+    function apply(hidden) {
+        spans.forEach(function (el) {
+            el.textContent = hidden ? '••••' : el.dataset.clear;
+        });
+        document.body.classList.toggle('solde-masque', hidden);
+        // Masque actif (caché) : œil simple. Masque désactivé (visible) : œil barré.
+        wrap.classList.toggle('barre', !hidden);
+        btn.setAttribute('aria-label', hidden ? 'Afficher le solde' : 'Masquer le solde');
+    }
+    var hidden = localStorage.getItem(KEY) === '1';
+    apply(hidden);
+    btn.addEventListener('click', function () {
+        hidden = !hidden;
+        localStorage.setItem(KEY, hidden ? '1' : '0');
+        apply(hidden);
+    });
+})();
+</script>
+{% endblock %}

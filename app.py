@@ -695,9 +695,13 @@ def parametres():
 # Utilitaires
 # ---------------------------------------------------------------------------
 def _to_float(v):
+    # On ne garde que les chiffres et séparateurs ; tolère espaces, espaces
+    # insécables, points de milliers saisis par l'utilisateur, etc.
+    s = "".join(ch for ch in str(v) if ch.isdigit() or ch in ".,-")
+    s = s.replace(",", ".")
     try:
-        return float(str(v).replace(" ", "").replace(",", "."))
-    except (ValueError, TypeError):
+        return float(s) if s else 0.0
+    except ValueError:
         return 0.0
 
 

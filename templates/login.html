@@ -1,15 +1,29 @@
 {% extends "base.html" %}
+{% from "_macros.html" import phone_field %}
 {% block title %}Connexion{% endblock %}
 {% block header %}Connexion{% endblock %}
 {% block nav %}{% endblock %}
 
 {% block content %}
-<form method="post" class="card-form login-form">
-    <div class="login-logo">🔒</div>
-    <h2>Entrez votre code</h2>
-    <p class="hint">Saisissez le code de connexion de votre compte.</p>
-    <input type="password" name="pin" inputmode="numeric" pattern="[0-9]*"
-           class="big-input" placeholder="••••" autofocus required>
-    <button type="submit" class="btn btn-primary btn-block">Se connecter</button>
-</form>
+<div class="auth-screen">
+    <div class="auth-logo">💰</div>
+    <h1 class="auth-title">Connectez-vous</h1>
+    <p class="auth-sub">Bienvenue, veuillez vous connecter pour continuer.</p>
+
+    <form method="post" class="auth-form">
+        <label>Numéro de téléphone</label>
+        {{ phone_field(autofocus=true) }}
+
+        <label class="lbl-mt">Code PIN</label>
+        <input type="password" name="pin" inputmode="numeric" pattern="[0-9]*"
+               class="pin-input" placeholder="••••" minlength="4" required>
+
+        <button type="submit" class="btn btn-primary btn-block btn-lg">Se connecter</button>
+    </form>
+
+    <p class="auth-switch">
+        Vous n'avez pas de compte ?
+        <a href="{{ url_for('signup') }}" class="link-signup">Inscrivez-vous</a>
+    </p>
+</div>
 {% endblock %}

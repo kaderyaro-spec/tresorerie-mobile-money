@@ -1,22 +1,16 @@
 {% extends "base.html" %}
 {% from "_macros.html" import op_logo %}
 {% block title %}Configuration — Trésorerie{% endblock %}
-{% block header %}Bienvenue 👋{% endblock %}
+{% block header %}Configuration{% endblock %}
 {% block nav %}{% endblock %}
 
 {% block content %}
 <form method="post" class="card-form" id="onboarding-form">
-    <p class="intro">Configurons votre point marchand en moins de 3 minutes.</p>
+    <p class="intro">Bonjour <strong>{{ pending.prenom }}</strong> 👋 Configurons votre point
+       marchand en moins de 3 minutes.</p>
 
     <section class="block">
-        <h2>1. Votre numéro</h2>
-        <label>Numéro de téléphone</label>
-        <input type="tel" name="phone" inputmode="tel" placeholder="Ex : 70 00 00 00" required>
-        <p class="hint">Un code de vérification (OTP) vous sera envoyé dans la version finale.</p>
-    </section>
-
-    <section class="block">
-        <h2>2. Vos opérateurs</h2>
+        <h2>1. Vos opérateurs</h2>
         <p class="hint">Cochez les services que vous gérez. Saisissez le solde d'UV de départ et le seuil d'alerte.</p>
         {% for op in operateurs %}
         <div class="op-row">
@@ -40,20 +34,23 @@
     </section>
 
     <section class="block">
-        <h2>3. Votre caisse</h2>
+        <h2>2. Votre caisse</h2>
         <label>Solde de caisse (espèces) de départ</label>
         <input type="number" name="cash_initial" inputmode="numeric" placeholder="0" min="0">
     </section>
 
     <section class="block">
-        <h2>4. Code de connexion</h2>
+        <h2>3. Code PIN de connexion</h2>
         <label>Choisissez un code (au moins 4 chiffres)</label>
         <input type="password" name="pin" inputmode="numeric" pattern="[0-9]*"
+               placeholder="••••" minlength="4" required>
+        <label class="lbl-mt">Confirmez le code</label>
+        <input type="password" name="pin2" inputmode="numeric" pattern="[0-9]*"
                placeholder="••••" minlength="4" required>
         <p class="hint">Ce code protège l'accès à vos données. Ne le partagez pas.</p>
     </section>
 
-    <button type="submit" class="btn btn-primary btn-block">Créer mon compte</button>
+    <button type="submit" class="btn btn-primary btn-block btn-lg">Créer mon compte</button>
 </form>
 
 <script>

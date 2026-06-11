@@ -36,6 +36,9 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS agent (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     phone               TEXT NOT NULL,
+    nom                 TEXT,                   -- nom de famille
+    prenom              TEXT,                   -- prénom
+    cni                 TEXT,                   -- numéro de carte d'identité (CNI)
     shop_name           TEXT,                   -- nom de la boutique
     subscription_status TEXT NOT NULL DEFAULT 'Essai gratuit',
     business_day        TEXT NOT NULL,          -- journée comptable ouverte
@@ -101,6 +104,9 @@ def _migrate(conn):
         conn.execute("ALTER TABLE agent ADD COLUMN pin_hash TEXT")
     if "shop_name" not in acols:
         conn.execute("ALTER TABLE agent ADD COLUMN shop_name TEXT")
+    for col in ("nom", "prenom", "cni"):
+        if col not in acols:
+            conn.execute(f"ALTER TABLE agent ADD COLUMN {col} TEXT")
 
 
 def init_db():

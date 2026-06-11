@@ -2,6 +2,15 @@
    - Si un vrai fichier logo est présent dans static/logos/, on l'affiche.
    - Sinon, repli sur une pastille colorée avec initiales.
    Usage : {% from "_macros.html" import op_logo %}  puis  {{ op_logo("Wave") }} #}
+{# Champ « numéro de téléphone » ivoirien : drapeau + indicatif +225 + 10 chiffres #}
+{% macro phone_field(value="", autofocus=false) %}
+<div class="phone-field">
+    <span class="phone-prefix">🇨🇮 +225</span>
+    <input type="tel" name="phone" inputmode="numeric" pattern="[0-9]{10}" maxlength="10"
+           value="{{ value }}" placeholder="07 00 00 00 00" required {% if autofocus %}autofocus{% endif %}>
+</div>
+{% endmacro %}
+
 {% macro op_logo(name, size=38) %}
     {% set s = op_style(name) %}
     {% if s.logo %}

@@ -115,13 +115,22 @@ def compute_state():
         w_txs = [t for t in txs_d if t["wallet_id"] == w["id"]]
         bal = logic.wallet_balance(w["opening_balance"], w_txs)
         wallet_balances.append(bal)
+
+        # Wave : commission calculée automatiquement via la grille (cumul du jour).
+        # Autres opérateurs : cumul des commissions saisies manuellement.
+        if w["operator"] == "Wave":
+            vol = logic.wave_volume(w_txs)
+            commission = logic.wave_daily_commission(vol)
+        else:
+            commission = logic.commissions_total(w_txs)
+
         wallet_states.append({
             "id": w["id"],
             "operator": w["operator"],
             "balance": bal,
             "threshold": w["alert_threshold"],
             "voyant": logic.voyant(bal, w["alert_threshold"]),
-            "commission": logic.commissions_total(w_txs),
+            "commission": commission,
         })
 
     cash_open = caisse["opening_balance"] if caisse else 0
@@ -150,86 +159,139 @@ def require_onboarding():
 
 
 # Points d'entrée accessibles sans être connecté
-PUBLIC_ENDPOINTS = {"login", "onboarding", "static", "index"}
+PUBLIC_ENDPOINTS = {"login", "signup", "onboarding", "static", "index"}
+
+
+def normalize_phone(raw):
+    """Garde uniquement les chiffres ; retire l'indicatif 225 s'il est présent."""
+    digits = "".join(c for c in str(raw or "") if c.isdigit())
+    if digits.startswith("225") and len(digits) > 10:
+        digits = digits[3:]
+    return digits
+
+
+def valid_ci_phone(phone):
+    """Numéro ivoirien : exactement 10 chiffres."""
+    return len(phone) == 10 and phone.isdigit()
 
 
 @app.before_request
 def require_login():
     """
-    Verrou de connexion par code PIN.
-    Si un compte existe avec un PIN défini et que la session n'est pas
-    authentifiée, on redirige vers l'écran de connexion. Tant qu'aucun PIN
-    n'est défini (ancien compte / usage local), l'accès reste libre.
+    Verrou d'accès. Tant qu'aucun compte n'existe, on dirige vers la connexion
+    (qui propose l'inscription). Une fois le compte créé, l'accès aux écrans
+    protégés exige une session authentifiée (numéro + code PIN).
     """
     if request.endpoint in PUBLIC_ENDPOINTS:
         return None
-    agent = db.get_agent()
-    if agent is None:
-        return None  # pas encore configuré → l'onboarding s'en charge
-    if agent["pin_hash"] and not session.get("auth"):
+    if db.get_agent() is None:
+        return redirect(url_for("login"))
+    if not session.get("auth"):
         return redirect(url_for("login"))
     return None
 
 
+@app.route("/")
+def index():
+    if not db.is_onboarded():
+        return redirect(url_for("login"))
+    return redirect(url_for("dashboard"))
+
+
+# ---------------------------------------------------------------------------
+# Connexion (numéro + code PIN)
+# ---------------------------------------------------------------------------
 @app.route("/login", methods=["GET", "POST"])
 def login():
     agent = db.get_agent()
     if agent is None:
-        return redirect(url_for("onboarding"))
-    # Si aucun PIN n'est défini, pas de verrou : accès direct.
-    if not agent["pin_hash"]:
-        session["auth"] = True
-        return redirect(url_for("dashboard"))
+        # Aucun compte encore : on oriente vers l'inscription.
+        return redirect(url_for("signup"))
 
     if request.method == "POST":
+        phone = normalize_phone(request.form.get("phone", ""))
         pin = request.form.get("pin", "").strip()
-        if check_password_hash(agent["pin_hash"], pin):
+        ok = (phone == agent["phone"]
+              and agent["pin_hash"]
+              and check_password_hash(agent["pin_hash"], pin))
+        if ok:
             session["auth"] = True
             return redirect(url_for("dashboard"))
-        flash("Code incorrect.", "error")
+        flash("Numéro ou code incorrect.", "error")
         return redirect(url_for("login"))
 
     return render_template("login.html")
 
 
 # ---------------------------------------------------------------------------
-# 4.1 — Onboarding / Configuration initiale
+# Inscription — étape 1 : identité (Nom, Prénom, CNI, numéro, conditions)
 # ---------------------------------------------------------------------------
-@app.route("/")
-def index():
-    if not db.is_onboarded():
+@app.route("/signup", methods=["GET", "POST"])
+def signup():
+    # MVP mono-compte : une seule inscription possible.
+    if db.is_onboarded():
+        flash("Un compte existe déjà sur cet appareil. Connectez-vous.", "error")
+        return redirect(url_for("login"))
+
+    if request.method == "POST":
+        nom = request.form.get("nom", "").strip()
+        prenom = request.form.get("prenom", "").strip()
+        cni = request.form.get("cni", "").strip()
+        phone = normalize_phone(request.form.get("phone", ""))
+        accept = request.form.get("accept")
+
+        if not nom or not prenom:
+            flash("Le nom et le prénom sont obligatoires.", "error")
+            return redirect(url_for("signup"))
+        if not valid_ci_phone(phone):
+            flash("Le numéro de téléphone doit comporter 10 chiffres.", "error")
+            return redirect(url_for("signup"))
+        if not accept:
+            flash("Vous devez accepter les conditions pour continuer.", "error")
+            return redirect(url_for("signup"))
+
+        # On mémorise l'identité, puis on passe à la configuration (étape 2).
+        session["signup"] = {"nom": nom, "prenom": prenom, "cni": cni, "phone": phone}
         return redirect(url_for("onboarding"))
-    return redirect(url_for("dashboard"))
+
+    return render_template("signup.html")
 
 
+# ---------------------------------------------------------------------------
+# Inscription — étape 2 : configuration (code PIN, opérateurs, soldes)
+# ---------------------------------------------------------------------------
 @app.route("/onboarding", methods=["GET", "POST"])
 def onboarding():
-    # Si déjà configuré, on n'y revient pas (étape unique — section 4.1)
     if db.is_onboarded():
         return redirect(url_for("dashboard"))
 
+    pending = session.get("signup")
+    if not pending:
+        # On ne configure pas sans être passé par l'inscription.
+        return redirect(url_for("signup"))
+
     if request.method == "POST":
-        phone = request.form.get("phone", "").strip()
-        shop_name = request.form.get("shop_name", "").strip()
         operators = request.form.getlist("operators")
         cash_initial = request.form.get("cash_initial", "0")
         pin = request.form.get("pin", "").strip()
+        pin2 = request.form.get("pin2", "").strip()
 
-        if not phone:
-            flash("Le numéro de téléphone est obligatoire.", "error")
+        if not pin or len(pin) < 4 or not pin.isdigit():
+            flash("Choisissez un code à 4 chiffres minimum.", "error")
+            return redirect(url_for("onboarding"))
+        if pin != pin2:
+            flash("Les deux codes ne correspondent pas.", "error")
             return redirect(url_for("onboarding"))
         if not operators:
             flash("Sélectionnez au moins un opérateur.", "error")
             return redirect(url_for("onboarding"))
-        if not pin or len(pin) < 4 or not pin.isdigit():
-            flash("Choisissez un code à 4 chiffres minimum.", "error")
-            return redirect(url_for("onboarding"))
 
         conn = db.get_db()
         cur = conn.execute(
-            "INSERT INTO agent (phone, shop_name, business_day, pin_hash, created_at) "
-            "VALUES (?,?,?,?,?)",
-            (phone, shop_name, db.today_str(), generate_password_hash(pin), db.now_str()),
+            "INSERT INTO agent (phone, nom, prenom, cni, business_day, pin_hash, created_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (pending["phone"], pending["nom"], pending["prenom"], pending["cni"],
+             db.today_str(), generate_password_hash(pin), db.now_str()),
         )
         agent_id = cur.lastrowid
 
@@ -248,11 +310,12 @@ def onboarding():
         )
         conn.commit()
         conn.close()
+        session.pop("signup", None)
         session["auth"] = True
         flash("Compte créé. Bienvenue !", "success")
         return redirect(url_for("dashboard"))
 
-    return render_template("onboarding.html", operateurs=logic.OPERATEURS)
+    return render_template("onboarding.html", operateurs=logic.OPERATEURS, pending=pending)
 
 
 # ---------------------------------------------------------------------------

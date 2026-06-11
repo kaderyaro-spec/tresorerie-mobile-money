@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% from "_macros.html" import phone_field %}
+{% block title %}Inscription{% endblock %}
+{% block header %}Créer un compte{% endblock %}
+{% block nav %}{% endblock %}
+
+{% block content %}
+<div class="auth-screen">
+    <div class="auth-logo">📝</div>
+    <h1 class="auth-title">S'inscrire</h1>
+    <p class="auth-sub">Créez votre compte pour gérer votre trésorerie.</p>
+
+    <form method="post" class="auth-form">
+        <label>Nom</label>
+        <input type="text" name="nom" placeholder="Votre nom" required autofocus>
+
+        <label class="lbl-mt">Prénom</label>
+        <input type="text" name="prenom" placeholder="Votre prénom" required>
+
+        <label class="lbl-mt">Numéro CNI</label>
+        <input type="text" name="cni" inputmode="numeric" placeholder="Numéro de votre pièce d'identité">
+
+        <label class="lbl-mt">Numéro de téléphone</label>
+        {{ phone_field() }}
+
+        <label class="terms">
+            <input type="checkbox" name="accept" value="1" required>
+            <span>J'accepte les <a href="#" class="link-inline">conditions générales</a> et la
+                  <a href="#" class="link-inline">politique de confidentialité</a>.</span>
+        </label>
+
+        <button type="submit" class="btn btn-primary btn-block btn-lg">Continuer</button>
+    </form>
+
+    <p class="auth-switch">
+        Vous avez déjà un compte ?
+        <a href="{{ url_for('login') }}" class="link-signup">Connectez-vous</a>
+    </p>
+</div>
+{% endblock %}

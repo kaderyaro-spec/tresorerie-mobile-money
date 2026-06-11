@@ -124,3 +124,69 @@ def voyant(current: float, threshold: float) -> str:
 def ecart(reel: float, theorique: float) -> float:
     """Écart de clôture (par ligne) = solde réel saisi − solde théorique."""
     return reel - theorique
+
+
+# ---------------------------------------------------------------------------
+# Grille de commission journalière Wave (Côte d'Ivoire).
+# La commission est déterminée par PALIER, en fonction du CUMUL des
+# transactions clients (dépôts + retraits) de la journée pour le portefeuille
+# Wave. Chaque tuple = (palier_inférieur, palier_supérieur, commission_jour).
+# Le dernier palier (palier_supérieur = None) signifie « illimité ».
+# ---------------------------------------------------------------------------
+WAVE_COMMISSION_GRID = [
+    (1,           9_995,        50),
+    (10_000,      99_995,       275),
+    (100_000,     174_995,      600),
+    (175_000,     249_995,      950),
+    (250_000,     599_995,      1_425),
+    (600_000,     999_995,      2_150),
+    (1_000_000,   1_499_995,    3_000),
+    (1_500_000,   1_999_995,    3_600),
+    (2_000_000,   2_499_995,    4_150),
+    (2_500_000,   2_999_995,    4_700),
+    (3_000_000,   3_499_995,    5_250),
+    (3_500_000,   3_999_995,    5_800),
+    (4_000_000,   4_499_995,    6_350),
+    (4_500_000,   4_999_995,    6_925),
+    (5_000_000,   5_499_995,    7_500),
+    (5_500_000,   5_999_995,    8_075),
+    (6_000_000,   6_499_995,    8_650),
+    (6_500_000,   6_999_995,    9_225),
+    (7_000_000,   7_499_995,    9_800),
+    (7_500_000,   7_999_995,    10_375),
+    (8_000_000,   8_999_995,    11_050),
+    (9_000_000,   9_999_995,    12_300),
+    (10_000_000,  12_499_995,   16_050),
+    (12_500_000,  14_999_995,   19_800),
+    (15_000_000,  17_499_995,   23_550),
+    (17_500_000,  19_999_995,   27_300),
+    (20_000_000,  24_999_995,   32_300),
+    (25_000_000,  29_999_995,   42_300),
+    (30_000_000,  None,         52_000),  # 30 000 000F et plus (illimité)
+]
+
+
+def wave_daily_commission(volume: float) -> float:
+    """
+    Commission journalière Wave selon le cumul (dépôts + retraits clients) du
+    jour. Renvoie 0 si aucun mouvement Wave.
+    """
+    if volume <= 0:
+        return 0
+    for low, high, comm in WAVE_COMMISSION_GRID:
+        if high is None or volume <= high:
+            return comm
+    return 0
+
+
+def wave_volume(transactions) -> float:
+    """
+    Cumul des montants de transactions clients (dépôts + retraits) servant de
+    base à la grille Wave. `transactions` : opérations déjà filtrées sur le
+    portefeuille Wave et la journée.
+    """
+    total = 0.0
+    for tx in transactions:
+        if tx["type"] in ("depot_client", "retrait_client"):
+            total += tx["amount"]
+    return total

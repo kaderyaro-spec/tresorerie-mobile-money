@@ -1,6 +1,6 @@
 // Service worker minimal — coquille hors-ligne (PWA).
 // Met en cache les ressources statiques pour un démarrage instantané.
-const CACHE = "tresorerie-v1";
+const CACHE = "tresorerie-v2";
 const ASSETS = [
   "/static/style.css",
   "/static/manifest.webmanifest"

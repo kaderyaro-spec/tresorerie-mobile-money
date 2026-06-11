@@ -1,27 +1,101 @@
 """
-Couche d'accès aux données — SQLite (fonctionnement 100 % local, hors-ligne).
+Couche d'accès aux données — compatible SQLite (local) et PostgreSQL (en ligne).
+
+- En local : SQLite (fichier data.db), aucun réglage nécessaire.
+- En ligne : si la variable d'environnement DATABASE_URL est définie (ex. Supabase),
+  l'application utilise PostgreSQL → les données sont conservées durablement.
+
+Le reste de l'application n'a pas à savoir quel moteur est utilisé : un petit
+adaptateur traduit les requêtes (placeholders « ? », identifiant auto, etc.).
 
 Modèle de données minimal (cahier des charges, section 5) :
   agent, wallet (portefeuille), caisse, transaction, cloture (+ lignes).
-
-Principe clé : les soldes sont recalculés à partir des transactions ; les
-colonnes opening_balance ne mémorisent que le point de départ de la JOURNÉE
-courante (mis à jour à chaque clôture).
 """
 import sqlite3
 import os
 from datetime import datetime
 
-# Chemin de la base : surchargeable par la variable d'environnement DB_PATH
-# (utile en hébergement cloud pour pointer vers un disque persistant).
+DATABASE_URL = os.environ.get("DATABASE_URL")  # défini = PostgreSQL ; sinon SQLite
+USE_PG = bool(DATABASE_URL)
+
 DB_PATH = os.environ.get("DB_PATH") or os.path.join(os.path.dirname(__file__), "data.db")
+
+if USE_PG:
+    import psycopg
+    from psycopg.rows import dict_row
+
+
+class _Cursor:
+    """Uniformise l'accès au résultat (fetchone/fetchall/lastrowid)."""
+    def __init__(self, cur, lastrowid=None):
+        self._cur = cur
+        self.lastrowid = lastrowid
+
+    def fetchone(self):
+        return self._cur.fetchone()
+
+    def fetchall(self):
+        return self._cur.fetchall()
+
+
+class _Conn:
+    """
+    Adaptateur de connexion. Expose l'API utilisée par l'application
+    (execute / executescript / commit / close) quel que soit le moteur.
+    """
+    def __init__(self, raw, pg):
+        self._raw = raw
+        self.pg = pg
+
+    def execute(self, sql, params=()):
+        if self.pg:
+            sql = sql.replace("?", "%s")
+            head = sql.lstrip()[:6].upper()
+            if head == "INSERT" and "RETURNING" not in sql.upper():
+                sql = sql.rstrip().rstrip(";") + " RETURNING id"
+                cur = self._raw.execute(sql, params)
+                row = cur.fetchone()
+                return _Cursor(cur, row["id"] if row else None)
+            cur = self._raw.execute(sql, params)
+            return _Cursor(cur)
+        cur = self._raw.execute(sql, params)
+        return _Cursor(cur, cur.lastrowid)
+
+    def executescript(self, sql):
+        if self.pg:
+            for stmt in sql.split(";"):
+                if stmt.strip():
+                    self._raw.execute(stmt)
+        else:
+            self._raw.executescript(sql)
+
+    def column_names(self, table):
+        if self.pg:
+            cur = self._raw.execute(
+                "SELECT column_name AS name FROM information_schema.columns "
+                "WHERE table_name = %s", (table,))
+        else:
+            cur = self._raw.execute(f"PRAGMA table_info({table})")
+        return {r["name"] for r in cur.fetchall()}
+
+    def commit(self):
+        self._raw.commit()
+
+    def close(self):
+        self._raw.close()
 
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    if USE_PG:
+        raw = psycopg.connect(DATABASE_URL, row_factory=dict_row)
+        # Désactive les requêtes préparées côté serveur : compatible avec le
+        # « transaction pooler » de Supabase (sinon erreurs de prepared statements).
+        raw.prepare_threshold = None
+        return _Conn(raw, pg=True)
+    raw = sqlite3.connect(DB_PATH)
+    raw.row_factory = sqlite3.Row
+    raw.execute("PRAGMA foreign_keys = ON")
+    return _Conn(raw, pg=False)
 
 
 def today_str():
@@ -96,10 +170,10 @@ CREATE TABLE IF NOT EXISTS cloture_line (
 
 def _migrate(conn):
     """Migrations légères pour les bases déjà créées avant l'ajout de colonnes."""
-    cols = {r["name"] for r in conn.execute("PRAGMA table_info(cloture_line)").fetchall()}
+    cols = conn.column_names("cloture_line")
     if "commission" not in cols:
         conn.execute("ALTER TABLE cloture_line ADD COLUMN commission REAL NOT NULL DEFAULT 0")
-    acols = {r["name"] for r in conn.execute("PRAGMA table_info(agent)").fetchall()}
+    acols = conn.column_names("agent")
     if "pin_hash" not in acols:
         conn.execute("ALTER TABLE agent ADD COLUMN pin_hash TEXT")
     if "shop_name" not in acols:
@@ -111,7 +185,11 @@ def _migrate(conn):
 
 def init_db():
     conn = get_db()
-    conn.executescript(SCHEMA)
+    schema = SCHEMA
+    if USE_PG:
+        # Adapter la syntaxe d'auto-incrément pour PostgreSQL.
+        schema = schema.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
+    conn.executescript(schema)
     _migrate(conn)
     conn.commit()
     conn.close()

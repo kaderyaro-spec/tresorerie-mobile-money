@@ -12,3 +12,5 @@ services:
         generateValue: true        # Render génère une clé secrète sûre
       - key: PYTHON_VERSION
         value: "3.12.7"
+      - key: DATABASE_URL          # chaîne de connexion PostgreSQL (Supabase)
+        sync: false                # valeur saisie manuellement dans Render (secret)

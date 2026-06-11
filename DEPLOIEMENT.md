@@ -1,14 +1,21 @@
-# Mettre l'application en ligne sur Render (lien partageable)
+# Application en ligne — état et guide
 
-Objectif : obtenir un lien fixe du type `https://tresorerie-mobile-money.onrender.com`,
-accessible 24h/24 (même PC éteint), à envoyer à tes testeurs.
+## ✅ État actuel (déployé)
 
-> ⚠️ **Avant de partager le lien**, ouvre l'app en ligne, fais l'onboarding,
-> puis définis ton **code PIN** (Réglages → Code de connexion). Sans lui, les
-> données seraient ouvertes à tous.
->
-> 👥 L'app gère **un seul compte** (limite du MVP) : tous les testeurs partagent
-> les mêmes données. Idéal pour des retours d'usage, pas pour des comptes séparés.
+- **Lien public** : https://tresorerie-mobile-money.onrender.com
+- **Hébergement** : Render (plan gratuit), déploiement automatique à chaque `git push`
+- **Base de données** : PostgreSQL **Supabase** (gratuit, données PERMANENTES)
+  via la variable d'environnement `DATABASE_URL` dans Render
+- **Multi-comptes** : chaque testeur crée son propre compte (numéro 10 chiffres + PIN),
+  données isolées par compte
+
+> 😴 Seule limite restante du plan gratuit : l'app s'endort après ~15 min
+> d'inactivité et met ~50 s à se réveiller à la visite suivante. Les données,
+> elles, ne sont jamais perdues (elles vivent dans Supabase).
+
+---
+
+# Guide d'origine (mise en place initiale)
 
 Le code est **déjà prêt** : dépôt Git initialisé, `render.yaml`, `Procfile`,
 `requirements.txt` (avec gunicorn). Il reste 3 étapes.

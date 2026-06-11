@@ -2,7 +2,7 @@
 // Stratégie « réseau d'abord » : on sert toujours la version la plus récente
 // quand il y a du réseau, et on retombe sur le cache uniquement hors-ligne.
 // (Évite d'afficher un ancien style mis en cache.)
-const CACHE = "tresorerie-v4";
+const CACHE = "tresorerie-v5";
 
 self.addEventListener("install", (e) => {
   self.skipWaiting();

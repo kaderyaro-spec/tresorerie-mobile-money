@@ -192,6 +192,16 @@ input:focus, select:focus { outline: none; border-color: var(--green); }
 .ecart-pos { color: var(--orange); }
 .row-cash td { font-weight: 700; }
 
+/* Clôture 3 colonnes : noms alignés, montant réel entièrement visible */
+.cloture-3col td { padding: 9px 5px; vertical-align: middle; }
+.cloture-3col .op-name { font-size: 13px; font-weight: 600; }
+.cloture-3col .op-name .op-logo { flex: none; }
+.cloture-3col .reel-input {
+    width: 100%; padding: 11px 8px !important; font-size: 16px;
+    text-align: right; font-weight: 600;
+}
+.cloture-3col .ecart-cell { font-size: 17px; }
+
 /* Commissions par opérateur */
 .comm-block { margin-top: 18px; background: #eaf3f1; border-radius: var(--radius); padding: 16px; }
 .comm-block h2 { font-size: 16px; margin: 0 0 10px; }

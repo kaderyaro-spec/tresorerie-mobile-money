@@ -226,6 +226,12 @@ input:focus, select:focus { outline: none; border-color: var(--green); }
 .btn-del { background: none; border: none; color: var(--red); font-size: 16px; cursor: pointer; padding: 4px 8px; font-weight: 700; }
 .empty { text-align: center; color: var(--muted); margin-top: 40px; }
 
+/* Journal des clôtures & exports */
+.journal-link { display: block; text-decoration: none; color: inherit; }
+.journal-btn { margin-top: 14px; }
+.export-row { display: flex; gap: 10px; margin: 12px 0; }
+.export-row .btn { flex: 1; padding: 12px; font-size: 14px; }
+
 /* Paramètres */
 .param-line { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); margin: 0; }
 .param-line span { color: var(--muted); }

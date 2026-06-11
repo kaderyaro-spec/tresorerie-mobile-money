@@ -6,7 +6,8 @@ Lancement :  python app.py   puis ouvrir http://localhost:5000
 """
 import os
 from flask import (
-    Flask, render_template, request, redirect, url_for, session, flash, jsonify
+    Flask, render_template, request, redirect, url_for, session, flash,
+    jsonify, Response
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 import db
@@ -530,11 +531,10 @@ def cloture():
 @app.route("/cloture/<int:cloture_id>")
 def cloture_recap(cloture_id):
     """Bilan d'une clôture : écarts + commissions par opérateur."""
-    r = require_onboarding()
-    if r:
-        return r
     conn = db.get_db()
-    cl = conn.execute("SELECT * FROM cloture WHERE id=?", (cloture_id,)).fetchone()
+    # La clôture doit appartenir au compte connecté (isolation multi-comptes).
+    cl = conn.execute("SELECT * FROM cloture WHERE id=? AND agent_id=?",
+                      (cloture_id, session["agent_id"])).fetchone()
     if cl is None:
         conn.close()
         flash("Clôture introuvable.", "error")
@@ -552,28 +552,34 @@ def cloture_recap(cloture_id):
 
 
 # ---------------------------------------------------------------------------
-# 4.6 — Historique
+# Journal des clôtures passées
 # ---------------------------------------------------------------------------
-@app.route("/historique")
-def historique():
-    r = require_onboarding()
-    if r:
-        return r
-
-    f_jour = request.args.get("jour", "")
-    f_wallet = request.args.get("wallet", "")
-    f_type = request.args.get("type", "")
-
+@app.route("/journal")
+def journal():
     conn = db.get_db()
-    agent = conn.execute("SELECT * FROM agent WHERE id=?", (session["agent_id"],)).fetchone()
-    wallets = conn.execute(
-        "SELECT * FROM wallet WHERE agent_id=? ORDER BY id", (agent["id"],)
+    clotures = conn.execute(
+        "SELECT c.id, c.date, c.created_at, "
+        "       COALESCE(SUM(l.ecart), 0) AS total_ecart, "
+        "       COALESCE(SUM(l.commission), 0) AS total_commission "
+        "FROM cloture c LEFT JOIN cloture_line l ON l.cloture_id = c.id "
+        "WHERE c.agent_id=? "
+        "GROUP BY c.id, c.date, c.created_at "
+        "ORDER BY c.date DESC, c.id DESC",
+        (session["agent_id"],),
     ).fetchall()
+    conn.close()
+    return render_template("journal.html", clotures=clotures)
 
+
+# ---------------------------------------------------------------------------
+# 4.6 — Historique (+ exports CSV / PDF)
+# ---------------------------------------------------------------------------
+def _filtered_transactions(conn, agent_id, f_jour, f_wallet, f_type):
+    """Transactions du compte, filtrées comme sur l'écran Historique."""
     query = ('SELECT t.*, w.operator AS operator FROM "transaction" t '
              "LEFT JOIN wallet w ON t.wallet_id = w.id "
              "WHERE t.agent_id=? AND t.deleted=0")
-    params = [agent["id"]]
+    params = [agent_id]
     if f_jour:
         query += " AND t.business_day=?"
         params.append(f_jour)
@@ -584,8 +590,22 @@ def historique():
         query += " AND t.type=?"
         params.append(f_type)
     query += " ORDER BY t.created_at DESC"
+    return conn.execute(query, params).fetchall()
 
-    txs = conn.execute(query, params).fetchall()
+
+@app.route("/historique")
+def historique():
+    f_jour = request.args.get("jour", "")
+    f_wallet = request.args.get("wallet", "")
+    f_type = request.args.get("type", "")
+
+    conn = db.get_db()
+    agent = conn.execute("SELECT * FROM agent WHERE id=?", (session["agent_id"],)).fetchone()
+    wallets = conn.execute(
+        "SELECT * FROM wallet WHERE agent_id=? ORDER BY id", (agent["id"],)
+    ).fetchall()
+
+    txs = _filtered_transactions(conn, agent["id"], f_jour, f_wallet, f_type)
     jours = conn.execute(
         'SELECT DISTINCT business_day FROM "transaction" '
         "WHERE agent_id=? ORDER BY business_day DESC", (agent["id"],)
@@ -603,11 +623,113 @@ def historique():
 def delete_transaction(tx_id):
     """Suppression douce d'une transaction saisie par erreur (avec trace)."""
     conn = db.get_db()
-    conn.execute('UPDATE "transaction" SET deleted=1 WHERE id=?', (tx_id,))
+    conn.execute('UPDATE "transaction" SET deleted=1 WHERE id=? AND agent_id=?',
+                 (tx_id, session["agent_id"]))
     conn.commit()
     conn.close()
     flash("Transaction supprimée. Les soldes ont été recalculés.", "success")
     return redirect(url_for("historique"))
+
+
+def _export_rows():
+    """Lignes de l'historique pour les exports (respecte les filtres d'URL)."""
+    f_jour = request.args.get("jour", "")
+    f_wallet = request.args.get("wallet", "")
+    f_type = request.args.get("type", "")
+    conn = db.get_db()
+    agent = conn.execute("SELECT * FROM agent WHERE id=?", (session["agent_id"],)).fetchone()
+    txs = _filtered_transactions(conn, agent["id"], f_jour, f_wallet, f_type)
+    conn.close()
+    return agent, txs
+
+
+@app.route("/export/csv")
+def export_csv():
+    """Télécharge l'historique (filtré) au format CSV (compatible Excel)."""
+    import csv
+    import io
+    agent, txs = _export_rows()
+
+    buf = io.StringIO()
+    writer = csv.writer(buf, delimiter=";")
+    writer.writerow(["Date/heure", "Journée", "Type", "Opérateur",
+                     "Montant (FCFA)", "Commission (FCFA)"])
+    for t in txs:
+        writer.writerow([
+            t["created_at"], t["business_day"],
+            logic.TX_TYPES.get(t["type"], {}).get("label", t["type"]),
+            t["operator"] or "Caisse",
+            int(t["amount"]), int(t["commission"] or 0),
+        ])
+
+    # BOM UTF-8 pour qu'Excel affiche correctement les accents.
+    data = "﻿" + buf.getvalue()
+    filename = f"historique_{db.today_str()}.csv"
+    return Response(
+        data,
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@app.route("/export/pdf")
+def export_pdf():
+    """Télécharge l'historique (filtré) au format PDF."""
+    from fpdf import FPDF
+    agent, txs = _export_rows()
+
+    def lat(s):
+        """fpdf (polices de base) est limité au latin-1."""
+        return str(s).encode("latin-1", "replace").decode("latin-1")
+
+    pdf = FPDF(orientation="P", unit="mm", format="A4")
+    pdf.set_auto_page_break(auto=True, margin=14)
+    pdf.add_page()
+
+    # En-tête du document
+    pdf.set_font("helvetica", "B", 15)
+    pdf.set_text_color(13, 110, 92)
+    pdf.cell(0, 9, lat("Historique des transactions"), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("helvetica", "", 10)
+    pdf.set_text_color(90, 90, 90)
+    titulaire = " ".join(x for x in [agent["prenom"], agent["nom"]] if x) or agent["phone"]
+    boutique = f" — {agent['shop_name']}" if agent["shop_name"] else ""
+    pdf.cell(0, 6, lat(f"Compte : {titulaire}{boutique} ({agent['phone']})"),
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 6, lat(f"Édité le {db.now_str()} — {len(txs)} opération(s)"),
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(3)
+
+    # Tableau
+    widths = [38, 24, 36, 38, 28, 26]   # total 190 mm
+    headers = ["Date/heure", "Journée", "Type", "Opérateur", "Montant", "Commission"]
+    pdf.set_font("helvetica", "B", 9)
+    pdf.set_fill_color(13, 110, 92)
+    pdf.set_text_color(255, 255, 255)
+    for w, h in zip(widths, headers):
+        pdf.cell(w, 8, lat(h), border=1, fill=True, align="C")
+    pdf.ln()
+
+    pdf.set_font("helvetica", "", 9)
+    pdf.set_text_color(30, 30, 30)
+    fill = False
+    pdf.set_fill_color(240, 245, 243)
+    for t in txs:
+        label = logic.TX_TYPES.get(t["type"], {}).get("label", t["type"])
+        row = [t["created_at"], t["business_day"], label, t["operator"] or "Caisse",
+               fmt(t["amount"]), fmt(t["commission"] or 0)]
+        aligns = ["L", "L", "L", "L", "R", "R"]
+        for w, val, al in zip(widths, row, aligns):
+            pdf.cell(w, 7, lat(val), border=1, fill=fill, align=al)
+        pdf.ln()
+        fill = not fill
+
+    filename = f"historique_{db.today_str()}.pdf"
+    return Response(
+        bytes(pdf.output()),
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 # ---------------------------------------------------------------------------

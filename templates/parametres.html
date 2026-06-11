@@ -63,6 +63,18 @@
     {% endif %}
 </section>
 
+<section class="block card-form">
+    <h2>📒 Journal & exports</h2>
+    <a href="{{ url_for('journal') }}" class="btn btn-secondary btn-block">Consulter le journal des clôtures</a>
+    <div class="export-row">
+        <a href="{{ url_for('export_csv') }}" class="btn btn-outline">⬇ Export CSV</a>
+        <a href="{{ url_for('export_pdf') }}" class="btn btn-outline">⬇ Export PDF</a>
+    </div>
+    <p class="hint">L'export contient tout l'historique des transactions. Pour exporter
+       une période ou un opérateur précis, utilisez les boutons de l'écran Historique
+       après avoir filtré.</p>
+</section>
+
 <form method="post" class="block card-form">
     <input type="hidden" name="action" value="set_pin">
     <h2>🔒 Code de connexion</h2>

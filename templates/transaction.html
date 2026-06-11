@@ -43,10 +43,6 @@
         <h2 id="amount-step">3. Montant</h2>
         <input type="number" name="amount" id="amount" inputmode="numeric"
                class="big-input" placeholder="0" min="1" required>
-        <label class="lbl-mt">Commission (optionnel)</label>
-        <input type="number" name="commission" id="commission" inputmode="numeric"
-               class="med-input" placeholder="0" min="0">
-        <p class="hint" id="commission-hint"></p>
     </section>
 
     <div class="form-actions">
@@ -60,8 +56,6 @@
     var typeInput = document.getElementById('tx-type');
     var walletBlock = document.getElementById('wallet-block');
     var walletIdInput = document.getElementById('wallet-id');
-    var commissionHint = document.getElementById('commission-hint');
-    var commissionField = document.getElementById('commission');
     var submitBtn = document.getElementById('submit-btn');
     var needsWallet = false;
 
@@ -78,11 +72,6 @@
             needsWallet = btn.dataset.wallet === '1';
             walletBlock.hidden = !needsWallet;
             if (!needsWallet) { walletIdInput.value = ''; }
-            // commission seulement pour les transactions clients
-            var isClient = btn.dataset.type === 'depot_client' || btn.dataset.type === 'retrait_client';
-            commissionField.parentNode.querySelector('.lbl-mt').style.display = isClient ? '' : 'none';
-            commissionField.style.display = isClient ? '' : 'none';
-            commissionHint.textContent = isClient ? 'Renseignez votre commission si vous la connaissez.' : '';
             refreshSubmit();
         });
     });

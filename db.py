@@ -122,9 +122,25 @@ def init_db():
 # ---------------------------------------------------------------------------
 
 def get_agent():
-    """Retourne l'agent unique du MVP (ou None s'il n'existe pas encore)."""
+    """Retourne le premier agent (compat ; en multi-comptes, préférer get_agent_by_id)."""
     conn = get_db()
     row = conn.execute("SELECT * FROM agent LIMIT 1").fetchone()
+    conn.close()
+    return row
+
+
+def get_agent_by_id(agent_id):
+    if not agent_id:
+        return None
+    conn = get_db()
+    row = conn.execute("SELECT * FROM agent WHERE id=?", (agent_id,)).fetchone()
+    conn.close()
+    return row
+
+
+def get_agent_by_phone(phone):
+    conn = get_db()
+    row = conn.execute("SELECT * FROM agent WHERE phone=?", (phone,)).fetchone()
     conn.close()
     return row
 

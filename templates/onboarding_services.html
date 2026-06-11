@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% from "_macros.html" import op_logo %}
+{% block title %}Vos services{% endblock %}
+{% block header %}Configuration{% endblock %}
+{% block nav %}{% endblock %}
+
+{% block content %}
+<div class="auth-screen">
+    <div class="wizard-steps">
+        <span class="wstep done">✓</span><span class="wline done"></span>
+        <span class="wstep done">✓</span><span class="wline done"></span>
+        <span class="wstep active">3</span>
+    </div>
+    <h1 class="auth-title">Vos services</h1>
+    <p class="auth-sub">Gérez-vous aussi la vente de crédit et le paiement de factures ?</p>
+
+    <form method="post" class="auth-form">
+        {% for srv in services %}
+        <label class="op-check service-check">
+            <input type="checkbox" name="services" value="{{ srv }}">
+            {{ op_logo(srv, 32) }}
+            <span>{{ srv }}</span>
+        </label>
+        {% endfor %}
+        <p class="hint">Vous pourrez en ajouter ou en retirer plus tard dans les Réglages.</p>
+
+        <button type="submit" class="btn btn-primary btn-block btn-lg">Terminer l'inscription</button>
+    </form>
+</div>
+{% endblock %}

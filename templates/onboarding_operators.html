@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "_macros.html" import op_logo %}
+{% block title %}Vos opérateurs{% endblock %}
+{% block header %}Configuration{% endblock %}
+{% block nav %}{% endblock %}
+
+{% block content %}
+<div class="auth-screen">
+    <div class="wizard-steps">
+        <span class="wstep done">✓</span><span class="wline done"></span>
+        <span class="wstep active">2</span><span class="wline"></span>
+        <span class="wstep">3</span>
+    </div>
+    <h1 class="auth-title">Vos opérateurs</h1>
+    <p class="auth-sub">Cochez les opérateurs Mobile Money que vous gérez.</p>
+
+    <form method="post" class="auth-form" id="ops-form">
+        {% for op in operateurs %}
+        <div class="op-row">
+            <label class="op-check">
+                <input type="checkbox" name="operators" value="{{ op }}" class="op-toggle" data-op="{{ op }}">
+                {{ op_logo(op, 32) }}
+                <span>{{ op }}</span>
+            </label>
+            <div class="op-fields" id="fields-{{ op }}" hidden>
+                <div class="field-inline">
+                    <label>Solde UV</label>
+                    <input type="number" name="solde_{{ op }}" inputmode="numeric" placeholder="0" min="0">
+                </div>
+                <div class="field-inline">
+                    <label>Seuil alerte</label>
+                    <input type="number" name="seuil_{{ op }}" inputmode="numeric" placeholder="0" min="0">
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        <label class="lbl-mt">Solde de caisse (espèces) de départ</label>
+        <input type="number" name="cash_initial" inputmode="numeric" placeholder="0" min="0">
+
+        <button type="submit" class="btn btn-primary btn-block btn-lg">Continuer</button>
+    </form>
+</div>
+
+<script>
+document.querySelectorAll('.op-toggle').forEach(function (cb) {
+    cb.addEventListener('change', function () {
+        document.getElementById('fields-' + this.dataset.op).hidden = !this.checked;
+    });
+});
+</script>
+{% endblock %}

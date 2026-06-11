@@ -263,6 +263,20 @@ input:focus, select:focus { outline: none; border-color: var(--green); }
 .link-signup { color: var(--green); font-weight: 800; text-decoration: none; }
 .btn-lg { padding: 17px; font-size: 17px; margin-top: 20px; }
 
+/* Assistant d'inscription : indicateur d'étapes */
+.wizard-steps { display: flex; align-items: center; justify-content: center; margin: 4px 0 18px; }
+.wstep {
+    width: 30px; height: 30px; border-radius: 50%; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 14px;
+    background: #e3e8e7; color: var(--muted);
+}
+.wstep.active { background: var(--green); color: #fff; }
+.wstep.done { background: var(--green); color: #fff; }
+.wline { width: 36px; height: 3px; background: #e3e8e7; }
+.wline.done { background: var(--green); }
+.service-check { border: 1.5px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+
 /* Bottom nav */
 .bottomnav {
     position: fixed; bottom: 0; left: 0; right: 0;

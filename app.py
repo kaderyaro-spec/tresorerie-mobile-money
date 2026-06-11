@@ -90,7 +90,7 @@ app.jinja_env.globals["op_style"] = op_style
 def compute_state():
     """Renvoie un dict décrivant la position de trésorerie de la journée."""
     conn = db.get_db()
-    agent = conn.execute("SELECT * FROM agent LIMIT 1").fetchone()
+    agent = conn.execute("SELECT * FROM agent WHERE id=?", (session["agent_id"],)).fetchone()
     if agent is None:
         conn.close()
         return None
@@ -152,14 +152,15 @@ def compute_state():
 
 
 def require_onboarding():
-    """Redirige vers l'onboarding si le compte n'est pas encore créé."""
-    if not db.is_onboarded():
-        return redirect(url_for("onboarding"))
+    """Conservé pour compatibilité ; l'accès est géré par require_login()."""
     return None
 
 
 # Points d'entrée accessibles sans être connecté
-PUBLIC_ENDPOINTS = {"login", "signup", "onboarding", "static", "index"}
+PUBLIC_ENDPOINTS = {
+    "login", "signup", "static", "index",
+    "onboarding_pin", "onboarding_operators", "onboarding_services",
+}
 
 
 def normalize_phone(raw):
@@ -175,46 +176,44 @@ def valid_ci_phone(phone):
     return len(phone) == 10 and phone.isdigit()
 
 
+def current_agent():
+    """L'agent du compte connecté (selon la session), ou None."""
+    return db.get_agent_by_id(session.get("agent_id"))
+
+
 @app.before_request
 def require_login():
     """
-    Verrou d'accès. Tant qu'aucun compte n'existe, on dirige vers la connexion
-    (qui propose l'inscription). Une fois le compte créé, l'accès aux écrans
-    protégés exige une session authentifiée (numéro + code PIN).
+    Verrou d'accès multi-comptes : chaque écran protégé exige une session
+    authentifiée rattachée à un compte existant. Sinon → écran de connexion.
     """
     if request.endpoint in PUBLIC_ENDPOINTS:
         return None
-    if db.get_agent() is None:
-        return redirect(url_for("login"))
-    if not session.get("auth"):
+    if not session.get("auth") or current_agent() is None:
+        session.pop("auth", None)
         return redirect(url_for("login"))
     return None
 
 
 @app.route("/")
 def index():
-    if not db.is_onboarded():
-        return redirect(url_for("login"))
-    return redirect(url_for("dashboard"))
+    if session.get("auth") and current_agent() is not None:
+        return redirect(url_for("dashboard"))
+    return redirect(url_for("login"))
 
 
 # ---------------------------------------------------------------------------
-# Connexion (numéro + code PIN)
+# Connexion (numéro + code PIN) — multi-comptes
 # ---------------------------------------------------------------------------
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    agent = db.get_agent()
-    if agent is None:
-        # Aucun compte encore : on oriente vers l'inscription.
-        return redirect(url_for("signup"))
-
     if request.method == "POST":
         phone = normalize_phone(request.form.get("phone", ""))
         pin = request.form.get("pin", "").strip()
-        ok = (phone == agent["phone"]
-              and agent["pin_hash"]
-              and check_password_hash(agent["pin_hash"], pin))
-        if ok:
+        agent = db.get_agent_by_phone(phone)
+        if agent and agent["pin_hash"] and check_password_hash(agent["pin_hash"], pin):
+            session.clear()
+            session["agent_id"] = agent["id"]
             session["auth"] = True
             return redirect(url_for("dashboard"))
         flash("Numéro ou code incorrect.", "error")
@@ -223,16 +222,17 @@ def login():
     return render_template("login.html")
 
 
+@app.route("/logout", methods=["POST"])
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+
 # ---------------------------------------------------------------------------
 # Inscription — étape 1 : identité (Nom, Prénom, CNI, numéro, conditions)
 # ---------------------------------------------------------------------------
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
-    # MVP mono-compte : une seule inscription possible.
-    if db.is_onboarded():
-        flash("Un compte existe déjà sur cet appareil. Connectez-vous.", "error")
-        return redirect(url_for("login"))
-
     if request.method == "POST":
         nom = request.form.get("nom", "").strip()
         prenom = request.form.get("prenom", "").strip()
@@ -249,73 +249,120 @@ def signup():
         if not accept:
             flash("Vous devez accepter les conditions pour continuer.", "error")
             return redirect(url_for("signup"))
+        if db.get_agent_by_phone(phone) is not None:
+            flash("Ce numéro est déjà utilisé. Connectez-vous.", "error")
+            return redirect(url_for("login"))
 
-        # On mémorise l'identité, puis on passe à la configuration (étape 2).
-        session["signup"] = {"nom": nom, "prenom": prenom, "cni": cni, "phone": phone}
-        return redirect(url_for("onboarding"))
+        # On démarre une nouvelle inscription propre.
+        session.clear()
+        session["reg"] = {"nom": nom, "prenom": prenom, "cni": cni, "phone": phone}
+        return redirect(url_for("onboarding_pin"))
 
     return render_template("signup.html")
 
 
 # ---------------------------------------------------------------------------
-# Inscription — étape 2 : configuration (code PIN, opérateurs, soldes)
+# Inscription — étape 2 : code PIN de connexion
 # ---------------------------------------------------------------------------
-@app.route("/onboarding", methods=["GET", "POST"])
-def onboarding():
-    if db.is_onboarded():
-        return redirect(url_for("dashboard"))
+@app.route("/inscription/pin", methods=["GET", "POST"])
+def onboarding_pin():
+    if not session.get("reg"):
+        return redirect(url_for("signup"))
 
-    pending = session.get("signup")
-    if not pending:
-        # On ne configure pas sans être passé par l'inscription.
+    if request.method == "POST":
+        pin = request.form.get("pin", "").strip()
+        pin2 = request.form.get("pin2", "").strip()
+        if not pin or len(pin) < 4 or not pin.isdigit():
+            flash("Choisissez un code à 4 chiffres minimum.", "error")
+            return redirect(url_for("onboarding_pin"))
+        if pin != pin2:
+            flash("Les deux codes ne correspondent pas.", "error")
+            return redirect(url_for("onboarding_pin"))
+        reg = session["reg"]
+        reg["pin_hash"] = generate_password_hash(pin)
+        session["reg"] = reg
+        return redirect(url_for("onboarding_operators"))
+
+    return render_template("onboarding_pin.html", step=1)
+
+
+# ---------------------------------------------------------------------------
+# Inscription — étape 3 : choix des opérateurs Mobile Money + caisse
+# ---------------------------------------------------------------------------
+@app.route("/inscription/operateurs", methods=["GET", "POST"])
+def onboarding_operators():
+    reg = session.get("reg")
+    if not reg or "pin_hash" not in reg:
         return redirect(url_for("signup"))
 
     if request.method == "POST":
         operators = request.form.getlist("operators")
-        cash_initial = request.form.get("cash_initial", "0")
-        pin = request.form.get("pin", "").strip()
-        pin2 = request.form.get("pin2", "").strip()
-
-        if not pin or len(pin) < 4 or not pin.isdigit():
-            flash("Choisissez un code à 4 chiffres minimum.", "error")
-            return redirect(url_for("onboarding"))
-        if pin != pin2:
-            flash("Les deux codes ne correspondent pas.", "error")
-            return redirect(url_for("onboarding"))
         if not operators:
             flash("Sélectionnez au moins un opérateur.", "error")
-            return redirect(url_for("onboarding"))
+            return redirect(url_for("onboarding_operators"))
+        ops = []
+        for op in operators:
+            ops.append({
+                "operator": op,
+                "opening": _to_float(request.form.get(f"solde_{op}", "0")),
+                "seuil": _to_float(request.form.get(f"seuil_{op}", "0")),
+            })
+        reg["ops"] = ops
+        reg["cash"] = _to_float(request.form.get("cash_initial", "0"))
+        session["reg"] = reg
+        return redirect(url_for("onboarding_services"))
+
+    return render_template("onboarding_operators.html",
+                           operateurs=logic.MONEY_OPERATORS, step=2)
+
+
+# ---------------------------------------------------------------------------
+# Inscription — étape 4 : choix des services (Crédit / Factures) + création
+# ---------------------------------------------------------------------------
+@app.route("/inscription/services", methods=["GET", "POST"])
+def onboarding_services():
+    reg = session.get("reg")
+    if not reg or "ops" not in reg:
+        return redirect(url_for("signup"))
+
+    if request.method == "POST":
+        services = request.form.getlist("services")
 
         conn = db.get_db()
         cur = conn.execute(
             "INSERT INTO agent (phone, nom, prenom, cni, business_day, pin_hash, created_at) "
             "VALUES (?,?,?,?,?,?,?)",
-            (pending["phone"], pending["nom"], pending["prenom"], pending["cni"],
-             db.today_str(), generate_password_hash(pin), db.now_str()),
+            (reg["phone"], reg["nom"], reg["prenom"], reg["cni"],
+             db.today_str(), reg["pin_hash"], db.now_str()),
         )
         agent_id = cur.lastrowid
 
-        for op in operators:
-            opening = _to_float(request.form.get(f"solde_{op}", "0"))
-            seuil = _to_float(request.form.get(f"seuil_{op}", "0"))
+        for o in reg["ops"]:
             conn.execute(
                 "INSERT INTO wallet (agent_id, operator, opening_balance, alert_threshold) "
                 "VALUES (?,?,?,?)",
-                (agent_id, op, opening, seuil),
+                (agent_id, o["operator"], o["opening"], o["seuil"]),
             )
-
+        for srv in services:
+            conn.execute(
+                "INSERT INTO wallet (agent_id, operator, opening_balance, alert_threshold) "
+                "VALUES (?,?,0,0)",
+                (agent_id, srv),
+            )
         conn.execute(
             "INSERT INTO caisse (agent_id, opening_balance) VALUES (?,?)",
-            (agent_id, _to_float(cash_initial)),
+            (agent_id, reg.get("cash", 0)),
         )
         conn.commit()
         conn.close()
-        session.pop("signup", None)
+
+        session.clear()
+        session["agent_id"] = agent_id
         session["auth"] = True
         flash("Compte créé. Bienvenue !", "success")
         return redirect(url_for("dashboard"))
 
-    return render_template("onboarding.html", operateurs=logic.OPERATEURS, pending=pending)
+    return render_template("onboarding_services.html", services=logic.SERVICES, step=3)
 
 
 # ---------------------------------------------------------------------------
@@ -357,7 +404,7 @@ def transaction():
             return redirect(url_for("transaction"))
 
         conn = db.get_db()
-        agent = conn.execute("SELECT * FROM agent LIMIT 1").fetchone()
+        agent = conn.execute("SELECT * FROM agent WHERE id=?", (session["agent_id"],)).fetchone()
         conn.execute(
             'INSERT INTO "transaction" '
             "(agent_id, business_day, created_at, type, wallet_id, amount, commission) "
@@ -400,7 +447,7 @@ def reappro():
             return redirect(url_for("reappro"))
 
         conn = db.get_db()
-        agent = conn.execute("SELECT * FROM agent LIMIT 1").fetchone()
+        agent = conn.execute("SELECT * FROM agent WHERE id=?", (session["agent_id"],)).fetchone()
         conn.execute(
             'INSERT INTO "transaction" '
             "(agent_id, business_day, created_at, type, wallet_id, amount, commission) "
@@ -428,7 +475,7 @@ def cloture():
 
     if request.method == "POST":
         conn = db.get_db()
-        agent = conn.execute("SELECT * FROM agent LIMIT 1").fetchone()
+        agent = conn.execute("SELECT * FROM agent WHERE id=?", (session["agent_id"],)).fetchone()
         cur = conn.execute(
             "INSERT INTO cloture (agent_id, date, created_at) VALUES (?,?,?)",
             (agent["id"], state["business_day"], db.now_str()),
@@ -518,7 +565,7 @@ def historique():
     f_type = request.args.get("type", "")
 
     conn = db.get_db()
-    agent = conn.execute("SELECT * FROM agent LIMIT 1").fetchone()
+    agent = conn.execute("SELECT * FROM agent WHERE id=?", (session["agent_id"],)).fetchone()
     wallets = conn.execute(
         "SELECT * FROM wallet WHERE agent_id=? ORDER BY id", (agent["id"],)
     ).fetchall()
@@ -573,7 +620,7 @@ def parametres():
         return r
 
     conn = db.get_db()
-    agent = conn.execute("SELECT * FROM agent LIMIT 1").fetchone()
+    agent = conn.execute("SELECT * FROM agent WHERE id=?", (session["agent_id"],)).fetchone()
 
     if request.method == "POST":
         action = request.form.get("action")
@@ -642,12 +689,6 @@ def parametres():
     conn.close()
 
     return render_template("parametres.html", agent=agent, wallets=wallets, dispo=dispo)
-
-
-@app.route("/logout", methods=["POST"])
-def logout():
-    session.clear()
-    return redirect(url_for("login"))
 
 
 # ---------------------------------------------------------------------------

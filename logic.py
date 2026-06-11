@@ -52,8 +52,12 @@ TX_TYPES = {
 # Opérations considérées comme « réapprovisionnement » (écran 4.4)
 REAPPRO_TYPES = {"achat_float", "depot_caisse", "retrait_caisse"}
 
-# Liste des opérateurs proposés à l'onboarding (section 4.1)
-OPERATEURS = ["Orange Money", "Moov Money", "Wave", "MTN", "Crédit", "Factures"]
+# Opérateurs Mobile Money (portefeuilles de float principaux)
+MONEY_OPERATORS = ["Orange Money", "Moov Money", "Wave", "MTN"]
+# Services complémentaires proposés séparément
+SERVICES = ["Crédit", "Factures"]
+# Liste complète (utilisée par ex. dans les paramètres)
+OPERATEURS = MONEY_OPERATORS + SERVICES
 
 
 def float_effect(tx_type: str, amount: float) -> float:

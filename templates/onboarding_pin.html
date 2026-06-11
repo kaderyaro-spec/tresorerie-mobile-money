@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Code PIN{% endblock %}
+{% block header %}Configuration{% endblock %}
+{% block nav %}{% endblock %}
+
+{% block content %}
+<div class="auth-screen">
+    <div class="wizard-steps">
+        <span class="wstep active">1</span><span class="wline"></span>
+        <span class="wstep">2</span><span class="wline"></span>
+        <span class="wstep">3</span>
+    </div>
+    <div class="auth-logo">🔒</div>
+    <h1 class="auth-title">Votre code PIN</h1>
+    <p class="auth-sub">Choisissez un code secret pour vous connecter.</p>
+
+    <form method="post" class="auth-form">
+        <label>Code PIN (4 chiffres minimum)</label>
+        <input type="password" name="pin" inputmode="numeric" pattern="[0-9]*"
+               class="pin-input" placeholder="••••" minlength="4" required autofocus>
+
+        <label class="lbl-mt">Confirmez le code</label>
+        <input type="password" name="pin2" inputmode="numeric" pattern="[0-9]*"
+               class="pin-input" placeholder="••••" minlength="4" required>
+
+        <button type="submit" class="btn btn-primary btn-block btn-lg">Continuer</button>
+    </form>
+</div>
+{% endblock %}

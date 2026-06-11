@@ -8,18 +8,17 @@
     <p class="intro">Saisissez les soldes réels constatés. L'écart avec le solde
        théorique calculé par l'application s'affiche automatiquement.</p>
 
-    <table class="cloture-table">
+    <table class="cloture-table cloture-3col">
         <colgroup>
-            <col style="width:24%"><col style="width:21%"><col style="width:21%"><col style="width:34%">
+            <col style="width:38%"><col style="width:34%"><col style="width:28%">
         </colgroup>
         <thead>
-            <tr><th>Portefeuille</th><th>Théorique</th><th>Réel constaté</th><th class="th-ecart">Écart</th></tr>
+            <tr><th>Portefeuille</th><th>Réel constaté</th><th class="th-ecart">Écart</th></tr>
         </thead>
         <tbody>
             {% for w in s.wallets %}
             <tr>
                 <td><span class="op-name">{{ op_logo(w.operator, 24) }} {{ w.operator }}</span></td>
-                <td class="theo" data-theo="{{ w.balance }}">{{ w.balance | fcfa }}</td>
                 <td><input type="number" inputmode="numeric" name="reel_wallet_{{ w.id }}"
                            class="reel-input" data-theo="{{ w.balance }}"
                            value="{{ w.balance | round(0, 'floor') | int }}"></td>
@@ -27,8 +26,7 @@
             </tr>
             {% endfor %}
             <tr class="row-cash">
-                <td>💵 Caisse</td>
-                <td class="theo" data-theo="{{ s.cash }}">{{ s.cash | fcfa }}</td>
+                <td><span class="op-name">💵 Caisse</span></td>
                 <td><input type="number" inputmode="numeric" name="reel_cash"
                            class="reel-input" data-theo="{{ s.cash }}"
                            value="{{ s.cash | round(0, 'floor') | int }}"></td>

@@ -1,13 +1,10 @@
-// Service worker minimal — coquille hors-ligne (PWA).
-// Met en cache les ressources statiques pour un démarrage instantané.
-const CACHE = "tresorerie-v3";
-const ASSETS = [
-  "/static/style.css",
-  "/static/manifest.webmanifest"
-];
+// Service worker — PWA.
+// Stratégie « réseau d'abord » : on sert toujours la version la plus récente
+// quand il y a du réseau, et on retombe sur le cache uniquement hors-ligne.
+// (Évite d'afficher un ancien style mis en cache.)
+const CACHE = "tresorerie-v4";
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
   self.skipWaiting();
 });
 
@@ -15,18 +12,20 @@ self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-    )
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener("fetch", (e) => {
   const req = e.request;
-  // Réseau d'abord pour les pages (données fraîches), cache en secours.
-  if (req.method === "GET" && req.headers.get("accept")?.includes("text/html")) {
-    e.respondWith(fetch(req).catch(() => caches.match(req)));
-    return;
-  }
-  // Cache d'abord pour les ressources statiques.
-  e.respondWith(caches.match(req).then((r) => r || fetch(req)));
+  if (req.method !== "GET") return;
+  e.respondWith(
+    fetch(req)
+      .then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(req, copy));
+        return res;
+      })
+      .catch(() => caches.match(req))
+  );
 });

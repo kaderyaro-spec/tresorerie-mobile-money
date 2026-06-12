@@ -150,8 +150,6 @@ CREATE TABLE IF NOT EXISTS "transaction" (
     client_uid   TEXT                              -- id généré côté téléphone (sync hors-ligne)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_tx_client_uid ON "transaction"(client_uid);
-
 CREATE TABLE IF NOT EXISTS cloture (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     agent_id   INTEGER NOT NULL REFERENCES agent(id),
@@ -189,8 +187,9 @@ def _migrate(conn):
     tcols = conn.column_names("transaction")
     if "client_uid" not in tcols:
         conn.execute('ALTER TABLE "transaction" ADD COLUMN client_uid TEXT')
-        conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_tx_client_uid '
-                     'ON "transaction"(client_uid)')
+    # L'index se crée APRÈS l'ajout de la colonne (bases existantes incluses).
+    conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_tx_client_uid '
+                 'ON "transaction"(client_uid)')
 
 
 def init_db():

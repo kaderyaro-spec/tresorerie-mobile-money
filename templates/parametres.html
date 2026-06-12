@@ -73,6 +73,14 @@
     <p class="hint">L'export contient tout l'historique des transactions. Pour exporter
        une période ou un opérateur précis, utilisez les boutons de l'écran Historique
        après avoir filtré.</p>
+
+    <form action="{{ url_for('rapport') }}" method="get" class="rapport-form">
+        <h3>📊 Rapport mensuel d'activité (PDF)</h3>
+        <p class="hint">Synthèse du mois : volume traité, commissions, écarts, dettes.
+           Utile pour suivre votre rentabilité ou appuyer une demande de financement.</p>
+        <input type="month" name="mois" value="{{ agent.business_day[:7] }}">
+        <button type="submit" class="btn btn-secondary btn-block">Télécharger le rapport</button>
+    </form>
 </section>
 
 <form method="post" class="block card-form">

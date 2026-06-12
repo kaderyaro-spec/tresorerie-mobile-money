@@ -126,12 +126,11 @@ def compute_state():
         bal = logic.wallet_balance(w["opening_balance"], w_txs)
         wallet_balances.append(bal)
 
-        # Wave : commission calculée automatiquement via la grille (cumul du jour).
-        # Autres opérateurs : cumul des commissions saisies manuellement.
-        if w["operator"] == "Wave":
-            vol = logic.wave_volume(w_txs)
-            commission = logic.wave_daily_commission(vol)
-        else:
+        # Commission : automatique si l'opérateur a une grille connue (Wave…),
+        # sinon cumul des commissions saisies manuellement.
+        vol = logic.wave_volume(w_txs)
+        commission = logic.daily_commission(w["operator"], vol)
+        if commission is None:
             commission = logic.commissions_total(w_txs)
 
         wallet_states.append({
@@ -141,6 +140,7 @@ def compute_state():
             "threshold": w["alert_threshold"],
             "voyant": logic.voyant(bal, w["alert_threshold"]),
             "commission": commission,
+            "prediction": logic.predict_depletion(bal, w_txs),
         })
 
     cash_open = caisse["opening_balance"] if caisse else 0
@@ -986,6 +986,176 @@ def export_pdf():
         fill = not fill
 
     filename = f"historique_{db.today_str()}.pdf"
+    return Response(
+        bytes(pdf.output()),
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Rapport mensuel PDF — dossier d'activité du point marchand
+# ---------------------------------------------------------------------------
+@app.route("/rapport")
+def rapport():
+    mois = request.args.get("mois") or db.today_str()[:7]      # YYYY-MM
+    if len(mois) != 7 or mois[4] != "-":
+        mois = db.today_str()[:7]
+
+    conn = db.get_db()
+    aid = session["agent_id"]
+    agent = conn.execute("SELECT * FROM agent WHERE id=?", (aid,)).fetchone()
+    txs = conn.execute(
+        'SELECT t.*, w.operator AS operator FROM "transaction" t '
+        "LEFT JOIN wallet w ON t.wallet_id = w.id "
+        "WHERE t.agent_id=? AND t.deleted=0 AND t.business_day LIKE ? "
+        "ORDER BY t.business_day, t.created_at",
+        (aid, mois + "%"),
+    ).fetchall()
+    ecarts = {r["date"]: r["ecart"] for r in conn.execute(
+        "SELECT c.date AS date, COALESCE(SUM(l.ecart),0) AS ecart "
+        "FROM cloture c LEFT JOIN cloture_line l ON l.cloture_id = c.id "
+        "WHERE c.agent_id=? AND c.date LIKE ? GROUP BY c.date",
+        (aid, mois + "%"),
+    ).fetchall()}
+    drow = conn.execute(
+        "SELECT COALESCE(SUM(amount),0) AS total, COUNT(*) AS n FROM dette "
+        "WHERE agent_id=? AND settled_at IS NULL", (aid,)).fetchone()
+    conn.close()
+
+    # Agrégats par jour et par opérateur
+    jours, operateurs = {}, {}
+    for t in txs:
+        d = t["business_day"]
+        jours.setdefault(d, {"n": 0, "vol": 0.0, "comm_manuelle": 0.0,
+                             "vol_grille": {}})
+        j = jours[d]
+        j["n"] += 1
+        if t["type"] in ("depot_client", "retrait_client"):
+            j["vol"] += t["amount"]
+            op = t["operator"] or "?"
+            o = operateurs.setdefault(op, {"vol": 0.0, "comm": 0.0, "n": 0})
+            o["vol"] += t["amount"]
+            o["n"] += 1
+            if op in logic.COMMISSION_GRIDS:
+                j["vol_grille"][op] = j["vol_grille"].get(op, 0.0) + t["amount"]
+            else:
+                j["comm_manuelle"] += t["commission"] or 0
+                o["comm"] += t["commission"] or 0
+
+    # Commission des opérateurs à grille : par JOUR (grille journalière), puis cumul
+    total_comm = 0.0
+    for d, j in jours.items():
+        c_jour = j["comm_manuelle"]
+        for op, vol in j["vol_grille"].items():
+            c_grille = logic.daily_commission(op, vol) or 0
+            c_jour += c_grille
+            operateurs[op]["comm"] += c_grille
+        j["comm"] = c_jour
+        total_comm += c_jour
+
+    total_vol = sum(j["vol"] for j in jours.values())
+    total_ops = sum(j["n"] for j in jours.values())
+    total_ecart = sum(ecarts.get(d, 0) for d in jours)
+
+    # --- Génération du PDF ---
+    from fpdf import FPDF
+
+    def lat(s):
+        return str(s).encode("latin-1", "replace").decode("latin-1")
+
+    pdf = FPDF(orientation="P", unit="mm", format="A4")
+    pdf.set_auto_page_break(auto=True, margin=14)
+    pdf.add_page()
+
+    pdf.set_font("helvetica", "B", 16)
+    pdf.set_text_color(13, 110, 92)
+    pdf.cell(0, 10, lat(f"Rapport d'activité — {mois}"), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("helvetica", "", 10)
+    pdf.set_text_color(90, 90, 90)
+    titulaire = " ".join(x for x in [agent["prenom"], agent["nom"]] if x) or agent["phone"]
+    boutique = f" — {agent['shop_name']}" if agent["shop_name"] else ""
+    pdf.cell(0, 6, lat(f"Point marchand : {titulaire}{boutique} ({agent['phone']})"),
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 6, lat(f"Édité le {db.now_str()} par Trésorerie Mobile Money"),
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(4)
+
+    # Synthèse
+    pdf.set_font("helvetica", "B", 12)
+    pdf.set_text_color(30, 30, 30)
+    pdf.cell(0, 8, lat("Synthèse du mois"), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("helvetica", "", 10)
+    for label, val in [
+        ("Volume traité (dépôts + retraits clients)", f"{fmt(total_vol)} FCFA"),
+        ("Nombre d'opérations", str(total_ops)),
+        ("Commissions estimées du mois", f"{fmt(total_comm)} FCFA"),
+        ("Jours d'activité", str(len(jours))),
+        ("Écart cumulé des clôtures", f"{fmt(total_ecart)} FCFA"),
+        ("Dettes clients en cours", f"{fmt(drow['total'])} FCFA ({drow['n']} client(s))"),
+    ]:
+        pdf.cell(110, 7, lat(label), border=0)
+        pdf.set_font("helvetica", "B", 10)
+        pdf.cell(0, 7, lat(val), border=0, new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("helvetica", "", 10)
+    pdf.ln(3)
+
+    # Par opérateur
+    if operateurs:
+        pdf.set_font("helvetica", "B", 12)
+        pdf.cell(0, 8, lat("Par opérateur"), new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("helvetica", "B", 9)
+        pdf.set_fill_color(13, 110, 92)
+        pdf.set_text_color(255, 255, 255)
+        for w_, h_ in zip([60, 40, 50, 40], ["Opérateur", "Opérations", "Volume", "Commissions"]):
+            pdf.cell(w_, 8, lat(h_), border=1, fill=True, align="C")
+        pdf.ln()
+        pdf.set_font("helvetica", "", 9)
+        pdf.set_text_color(30, 30, 30)
+        for op, o in sorted(operateurs.items()):
+            pdf.cell(60, 7, lat(op), border=1)
+            pdf.cell(40, 7, str(o["n"]), border=1, align="R")
+            pdf.cell(50, 7, lat(fmt(o["vol"])), border=1, align="R")
+            pdf.cell(40, 7, lat(fmt(o["comm"])), border=1, align="R")
+            pdf.ln()
+        pdf.ln(3)
+
+    # Par jour
+    if jours:
+        pdf.set_font("helvetica", "B", 12)
+        pdf.cell(0, 8, lat("Détail par jour"), new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("helvetica", "B", 9)
+        pdf.set_fill_color(13, 110, 92)
+        pdf.set_text_color(255, 255, 255)
+        for w_, h_ in zip([40, 30, 45, 40, 35], ["Date", "Opérations", "Volume", "Commissions", "Écart clôture"]):
+            pdf.cell(w_, 8, lat(h_), border=1, fill=True, align="C")
+        pdf.ln()
+        pdf.set_font("helvetica", "", 9)
+        pdf.set_text_color(30, 30, 30)
+        fill = False
+        pdf.set_fill_color(240, 245, 243)
+        for d in sorted(jours):
+            j = jours[d]
+            ec = ecarts.get(d)
+            pdf.cell(40, 7, lat(d), border=1, fill=fill)
+            pdf.cell(30, 7, str(j["n"]), border=1, align="R", fill=fill)
+            pdf.cell(45, 7, lat(fmt(j["vol"])), border=1, align="R", fill=fill)
+            pdf.cell(40, 7, lat(fmt(j["comm"])), border=1, align="R", fill=fill)
+            pdf.cell(35, 7, lat(fmt(ec) if ec is not None else "non clôturé"),
+                     border=1, align="R", fill=fill)
+            pdf.ln()
+            fill = not fill
+
+    pdf.ln(5)
+    pdf.set_font("helvetica", "I", 8)
+    pdf.set_text_color(120, 120, 120)
+    pdf.multi_cell(0, 5, lat(
+        "Document généré automatiquement à partir des opérations enregistrées par "
+        "l'agent dans l'application Trésorerie Mobile Money. Les commissions des "
+        "opérateurs à grille connue (Wave) sont estimées selon la grille officielle ; "
+        "les autres selon les saisies de l'agent."))
+
+    filename = f"rapport_{mois}.pdf"
     return Response(
         bytes(pdf.output()),
         mimetype="application/pdf",

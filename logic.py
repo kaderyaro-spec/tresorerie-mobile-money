@@ -194,3 +194,89 @@ def wave_volume(transactions) -> float:
         if tx["type"] in ("depot_client", "retrait_client"):
             total += tx["amount"]
     return total
+
+
+# ---------------------------------------------------------------------------
+# Grilles de commissions par opérateur.
+# Wave est automatisé ; les autres opérateurs s'ajoutent ici dès que leur
+# grille officielle est fournie (même format : palier bas, palier haut, F/jour).
+# ---------------------------------------------------------------------------
+COMMISSION_GRIDS = {
+    "Wave": WAVE_COMMISSION_GRID,
+}
+
+
+def daily_commission(operator: str, volume: float):
+    """
+    Commission journalière de l'opérateur selon sa grille (cumul du jour).
+    Renvoie None si l'opérateur n'a pas de grille connue (saisie manuelle).
+    """
+    grid = COMMISSION_GRIDS.get(operator)
+    if grid is None:
+        return None
+    if volume <= 0:
+        return 0
+    for low, high, comm in grid:
+        if high is None or volume <= high:
+            return comm
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Prévision de rupture d'UV.
+# Idée : au rythme de consommation observé depuis la première opération du
+# jour, à quelle heure le solde UV sera-t-il épuisé ? Si c'est avant la fin
+# de la journée de travail, on prévient et on suggère un montant de réappro.
+# ---------------------------------------------------------------------------
+END_OF_DAY_HOUR = 21          # fin de journée type d'un point marchand
+MIN_ACTIVE_HOURS = 0.5        # éviter les divisions par des durées minuscules
+
+
+def predict_depletion(balance: float, transactions, now=None):
+    """
+    Prédit l'épuisement de l'UV d'un portefeuille.
+    `transactions` : opérations du jour de CE portefeuille (type, amount,
+    created_at au format YYYY-MM-DD HH:MM:SS).
+    Renvoie None (pas de risque avant la fin de journée) ou un dict :
+      {"eta": "15h30", "suggestion": 80000}
+    """
+    import math
+    from datetime import datetime, timedelta
+
+    now = now or datetime.now()
+    if balance <= 0:
+        return None
+
+    # Consommation d'UV du jour = opérations qui font baisser le solde UV
+    sorties = [t for t in transactions
+               if TX_TYPES.get(t["type"], {}).get("float", 0) < 0]
+    conso = sum(t["amount"] for t in sorties)
+    if conso <= 0:
+        return None
+
+    try:
+        t0 = min(datetime.strptime(t["created_at"], "%Y-%m-%d %H:%M:%S")
+                 for t in sorties)
+    except (ValueError, TypeError):
+        return None
+
+    hours_active = max((now - t0).total_seconds() / 3600.0, MIN_ACTIVE_HOURS)
+    rate = conso / hours_active                   # F consommés par heure
+    if rate <= 0:
+        return None
+
+    eta = now + timedelta(hours=balance / rate)
+    end_of_day = now.replace(hour=END_OF_DAY_HOUR, minute=0, second=0,
+                             microsecond=0)
+    if eta >= end_of_day:
+        return None                                # pas de rupture avant ce soir
+
+    # Suggestion : couvrir la consommation projetée jusqu'à la fin de journée,
+    # arrondie aux 5 000 F supérieurs.
+    remaining_hours = max((end_of_day - now).total_seconds() / 3600.0, 0)
+    needed = rate * remaining_hours - balance
+    if needed <= 0:
+        return None
+    suggestion = int(math.ceil(needed / 5000.0) * 5000)
+
+    return {"eta": eta.strftime("%Hh%M"), "suggestion": suggestion}

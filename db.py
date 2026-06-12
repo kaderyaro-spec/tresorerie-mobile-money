@@ -70,12 +70,13 @@ class _Conn:
             self._raw.executescript(sql)
 
     def column_names(self, table):
+        table = table.strip('"')  # « transaction » est un mot réservé SQL
         if self.pg:
             cur = self._raw.execute(
                 "SELECT column_name AS name FROM information_schema.columns "
                 "WHERE table_name = %s", (table,))
         else:
-            cur = self._raw.execute(f"PRAGMA table_info({table})")
+            cur = self._raw.execute(f'PRAGMA table_info("{table}")')
         return {r["name"] for r in cur.fetchall()}
 
     def commit(self):
@@ -117,6 +118,7 @@ CREATE TABLE IF NOT EXISTS agent (
     subscription_status TEXT NOT NULL DEFAULT 'Essai gratuit',
     business_day        TEXT NOT NULL,          -- journée comptable ouverte
     pin_hash            TEXT,                   -- code de connexion (haché)
+    recovery_hash       TEXT,                   -- code de récupération du PIN (haché)
     created_at          TEXT NOT NULL
 );
 
@@ -144,8 +146,11 @@ CREATE TABLE IF NOT EXISTS "transaction" (
     wallet_id    INTEGER REFERENCES wallet(id),   -- NULL pour les opérations cash seules
     amount       REAL NOT NULL,
     commission   REAL NOT NULL DEFAULT 0,
-    deleted      INTEGER NOT NULL DEFAULT 0
+    deleted      INTEGER NOT NULL DEFAULT 0,
+    client_uid   TEXT                              -- id généré côté téléphone (sync hors-ligne)
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tx_client_uid ON "transaction"(client_uid);
 
 CREATE TABLE IF NOT EXISTS cloture (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -178,9 +183,14 @@ def _migrate(conn):
         conn.execute("ALTER TABLE agent ADD COLUMN pin_hash TEXT")
     if "shop_name" not in acols:
         conn.execute("ALTER TABLE agent ADD COLUMN shop_name TEXT")
-    for col in ("nom", "prenom", "cni"):
+    for col in ("nom", "prenom", "cni", "recovery_hash"):
         if col not in acols:
             conn.execute(f"ALTER TABLE agent ADD COLUMN {col} TEXT")
+    tcols = conn.column_names("transaction")
+    if "client_uid" not in tcols:
+        conn.execute('ALTER TABLE "transaction" ADD COLUMN client_uid TEXT')
+        conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_tx_client_uid '
+                     'ON "transaction"(client_uid)')
 
 
 def init_db():

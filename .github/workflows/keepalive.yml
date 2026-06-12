@@ -1,0 +1,18 @@
+# Maintient le serveur Render éveillé : un appel toutes les 10 minutes
+# évite la mise en veille (~15 min d'inactivité) et donc le délai de
+# réveil de ~50 s à la première visite.
+name: Keep-alive
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}   # déclenchement manuel possible
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping du serveur
+        run: |
+          curl -s -o /dev/null -w "HTTP %{http_code} en %{time_total}s\n" \
+            --max-time 90 https://tresorerie-mobile-money.onrender.com/ping || true

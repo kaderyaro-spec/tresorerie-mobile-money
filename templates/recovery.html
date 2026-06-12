@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "_macros.html" import phone_field %}
+{% block title %}PIN oublié{% endblock %}
+{% block header %}Récupération{% endblock %}
+{% block nav %}{% endblock %}
+
+{% block content %}
+<div class="auth-screen">
+    <div class="auth-logo">🛟</div>
+    <h1 class="auth-title">PIN oublié ?</h1>
+    <p class="auth-sub">Entrez votre numéro et le code de secours noté lors de votre inscription.</p>
+
+    <form method="post" class="auth-form">
+        <label>Numéro de téléphone</label>
+        {{ phone_field(autofocus=true) }}
+
+        <label class="lbl-mt">Code de secours</label>
+        <input type="text" name="code" class="pin-input" placeholder="XXXX-XXXX"
+               autocapitalize="characters" autocomplete="off" required>
+
+        <button type="submit" class="btn btn-primary btn-block btn-lg">Continuer</button>
+    </form>
+
+    <p class="auth-switch">
+        <a href="{{ url_for('login') }}" class="link-signup">← Retour à la connexion</a>
+    </p>
+</div>
+{% endblock %}

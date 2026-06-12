@@ -48,11 +48,14 @@
     </nav>
     {% endblock %}
 
+    <div id="offline-banner" class="offline-banner" hidden></div>
+
     <script>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register("{{ url_for('static', filename='sw.js') }}");
       }
     </script>
+    <script src="{{ url_for('static', filename='offline.js') }}"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

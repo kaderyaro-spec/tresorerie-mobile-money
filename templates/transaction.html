@@ -84,6 +84,13 @@
             refreshSubmit();
         });
     });
+
+    // Soumission « réseau d'abord, hors-ligne en secours »
+    document.getElementById('tx-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        submitBtn.disabled = true;
+        AppOffline.submitOperation(this, "{{ url_for('dashboard') }}");
+    });
 })();
 </script>
 {% endblock %}

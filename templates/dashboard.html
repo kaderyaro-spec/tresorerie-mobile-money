@@ -4,6 +4,20 @@
 {% block header %}{{ s.agent.shop_name or ("Bonjour " ~ s.agent.prenom) if s.agent.prenom else "Ma trésorerie" }}{% endblock %}
 
 {% block content %}
+{% if request.args.get('undo') %}
+<div class="undo-bar" id="undo-bar">
+    <span>✓ Opération enregistrée</span>
+    <form method="post" action="{{ url_for('delete_transaction', tx_id=request.args.get('undo')) }}">
+        <input type="hidden" name="next" value="dashboard">
+        <button type="submit" class="btn-undo">↩ Annuler</button>
+    </form>
+</div>
+{% elif request.args.get('offline') %}
+<div class="undo-bar" id="undo-bar">
+    <span>📴 Enregistré hors-ligne — synchronisation automatique dès le retour du réseau</span>
+</div>
+{% endif %}
+
 <div class="total-banner" id="solde-banner">
     <span class="total-label">Fond de roulement</span>
     <div class="total-value-row">
@@ -71,6 +85,18 @@
         localStorage.setItem(KEY, hidden ? '1' : '0');
         apply(hidden);
     });
+
+    // La barre de confirmation/annulation disparaît après 8 secondes
+    var undoBar = document.getElementById('undo-bar');
+    if (undoBar) {
+        setTimeout(function () {
+            undoBar.style.transition = 'opacity .4s';
+            undoBar.style.opacity = '0';
+            setTimeout(function () { undoBar.remove(); }, 400);
+        }, 8000);
+        // Nettoie l'URL pour qu'un rafraîchissement ne réaffiche pas la barre
+        if (history.replaceState) history.replaceState(null, '', location.pathname);
+    }
 })();
 </script>
 {% endblock %}

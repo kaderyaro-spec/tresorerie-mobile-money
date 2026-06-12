@@ -17,6 +17,10 @@ app = Flask(__name__)
 # Clé secrète : définie par variable d'environnement en production (cloud),
 # valeur de repli pour le développement local.
 app.secret_key = os.environ.get("SECRET_KEY", "mvp-tresorerie-mobile-money-dev")
+# Session longue durée : l'agent reste connecté sur son téléphone (essentiel
+# pour que la synchronisation hors-ligne fonctionne même des jours plus tard).
+from datetime import timedelta
+app.permanent_session_lifetime = timedelta(days=30)
 
 
 # ---------------------------------------------------------------------------
@@ -159,8 +163,9 @@ def require_onboarding():
 
 # Points d'entrée accessibles sans être connecté
 PUBLIC_ENDPOINTS = {
-    "login", "signup", "static", "index",
+    "login", "signup", "static", "index", "ping",
     "onboarding_pin", "onboarding_operators", "onboarding_services",
+    "recovery_request", "recovery_newpin",
 }
 
 
@@ -175,6 +180,14 @@ def normalize_phone(raw):
 def valid_ci_phone(phone):
     """Numéro ivoirien : exactement 10 chiffres."""
     return len(phone) == 10 and phone.isdigit()
+
+
+def _new_recovery_code():
+    """Code de récupération lisible, ex. « K7M3-P9R2 » (sans caractères ambigus)."""
+    import secrets
+    alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+    raw = "".join(secrets.choice(alphabet) for _ in range(8))
+    return f"{raw[:4]}-{raw[4:]}"
 
 
 def current_agent():
@@ -192,8 +205,17 @@ def require_login():
         return None
     if not session.get("auth") or current_agent() is None:
         session.pop("auth", None)
+        # Les appels API (sync hors-ligne) reçoivent un statut JSON, pas une page.
+        if request.path.startswith("/api/"):
+            return jsonify({"ok": False, "error": "non_connecte"}), 401
         return redirect(url_for("login"))
     return None
+
+
+@app.route("/ping")
+def ping():
+    """Sonde de disponibilité (utilisée pour garder le serveur éveillé)."""
+    return "ok", 200
 
 
 @app.route("/")
@@ -214,6 +236,7 @@ def login():
         agent = db.get_agent_by_phone(phone)
         if agent and agent["pin_hash"] and check_password_hash(agent["pin_hash"], pin):
             session.clear()
+            session.permanent = True
             session["agent_id"] = agent["id"]
             session["auth"] = True
             return redirect(url_for("dashboard"))
@@ -227,6 +250,60 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+
+# ---------------------------------------------------------------------------
+# PIN oublié — récupération par numéro + code de secours
+# ---------------------------------------------------------------------------
+@app.route("/recuperation", methods=["GET", "POST"])
+def recovery_request():
+    if request.method == "POST":
+        phone = normalize_phone(request.form.get("phone", ""))
+        code = request.form.get("code", "").strip().upper().replace(" ", "")
+        if "-" not in code and len(code) == 8:
+            code = f"{code[:4]}-{code[4:]}"
+        agent = db.get_agent_by_phone(phone)
+        if (agent and agent["recovery_hash"]
+                and check_password_hash(agent["recovery_hash"], code)):
+            session.clear()
+            session["reset_agent_id"] = agent["id"]
+            return redirect(url_for("recovery_newpin"))
+        flash("Numéro ou code de récupération incorrect.", "error")
+        return redirect(url_for("recovery_request"))
+    return render_template("recovery.html")
+
+
+@app.route("/recuperation/nouveau-pin", methods=["GET", "POST"])
+def recovery_newpin():
+    agent_id = session.get("reset_agent_id")
+    if not agent_id:
+        return redirect(url_for("recovery_request"))
+
+    if request.method == "POST":
+        pin = request.form.get("pin", "").strip()
+        pin2 = request.form.get("pin2", "").strip()
+        if not pin or len(pin) < 4 or not pin.isdigit():
+            flash("Choisissez un code à 4 chiffres minimum.", "error")
+            return redirect(url_for("recovery_newpin"))
+        if pin != pin2:
+            flash("Les deux codes ne correspondent pas.", "error")
+            return redirect(url_for("recovery_newpin"))
+
+        conn = db.get_db()
+        conn.execute("UPDATE agent SET pin_hash=? WHERE id=?",
+                     (generate_password_hash(pin), agent_id))
+        conn.commit()
+        conn.close()
+        # Connexion directe avec le nouveau PIN.
+        session.clear()
+        session.permanent = True
+        session["agent_id"] = agent_id
+        session["auth"] = True
+        flash("Nouveau code PIN enregistré. Pensez à générer un nouveau "
+              "code de récupération dans les Réglages.", "success")
+        return redirect(url_for("dashboard"))
+
+    return render_template("recovery_pin.html")
 
 
 # ---------------------------------------------------------------------------
@@ -357,13 +434,32 @@ def onboarding_services():
         conn.commit()
         conn.close()
 
+        # Code de récupération du PIN : généré une fois, montré une seule fois.
+        recovery_code = _new_recovery_code()
+        conn2 = db.get_db()
+        conn2.execute("UPDATE agent SET recovery_hash=? WHERE id=?",
+                      (generate_password_hash(recovery_code), agent_id))
+        conn2.commit()
+        conn2.close()
+
         session.clear()
+        session.permanent = True
         session["agent_id"] = agent_id
         session["auth"] = True
+        session["show_recovery"] = recovery_code
         flash("Compte créé. Bienvenue !", "success")
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("onboarding_recovery"))
 
     return render_template("onboarding_services.html", services=logic.SERVICES, step=3)
+
+
+@app.route("/inscription/code-secours")
+def onboarding_recovery():
+    """Affiche le code de récupération une seule fois après l'inscription."""
+    code = session.pop("show_recovery", None)
+    if not code:
+        return redirect(url_for("dashboard"))
+    return render_template("onboarding_recovery.html", code=code)
 
 
 # ---------------------------------------------------------------------------
@@ -381,43 +477,80 @@ def dashboard():
 # ---------------------------------------------------------------------------
 # 4.3 — Saisie d'une transaction
 # ---------------------------------------------------------------------------
+def _save_operation(tx_type, wallet_id, amount, commission=0, client_uid=None,
+                    created_at=None):
+    """
+    Valide et enregistre une opération pour le compte connecté.
+    Idempotent : si `client_uid` existe déjà, l'opération n'est pas dupliquée.
+    Retourne (tx_id, None) en cas de succès, (None, message) sinon.
+    """
+    if tx_type not in logic.TX_TYPES:
+        return None, "Type d'opération invalide."
+    if amount <= 0:
+        return None, "Le montant doit être supérieur à zéro."
+    needs_wallet = logic.TX_TYPES[tx_type]["wallet"]
+    if needs_wallet and not wallet_id:
+        return None, "Sélectionnez l'opérateur concerné."
+
+    conn = db.get_db()
+    agent = conn.execute("SELECT * FROM agent WHERE id=?", (session["agent_id"],)).fetchone()
+
+    # Idempotence (synchronisation hors-ligne : le même envoi peut arriver 2 fois)
+    if client_uid:
+        existing = conn.execute(
+            'SELECT id FROM "transaction" WHERE client_uid=?', (client_uid,)
+        ).fetchone()
+        if existing:
+            conn.close()
+            return existing["id"], None
+
+    # Le portefeuille doit appartenir au compte connecté
+    if needs_wallet:
+        w = conn.execute("SELECT id FROM wallet WHERE id=? AND agent_id=?",
+                         (wallet_id, agent["id"])).fetchone()
+        if w is None:
+            conn.close()
+            return None, "Opérateur introuvable."
+
+    cur = conn.execute(
+        'INSERT INTO "transaction" '
+        "(agent_id, business_day, created_at, type, wallet_id, amount, commission, client_uid) "
+        "VALUES (?,?,?,?,?,?,?,?)",
+        (agent["id"], agent["business_day"], created_at or db.now_str(), tx_type,
+         wallet_id if needs_wallet else None, amount, commission, client_uid),
+    )
+    tx_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return tx_id, None
+
+
+def _wants_json():
+    """La requête vient-elle du JavaScript de l'app (fetch) ?"""
+    return request.headers.get("X-Requested-With") == "fetch"
+
+
 @app.route("/transaction", methods=["GET", "POST"])
 def transaction():
-    r = require_onboarding()
-    if r:
-        return r
     state = compute_state()
 
     if request.method == "POST":
-        tx_type = request.form.get("type")
-        wallet_id = request.form.get("wallet_id") or None
-        amount = _to_float(request.form.get("amount", "0"))
-        commission = _to_float(request.form.get("commission", "0"))
-
-        if tx_type not in logic.TX_TYPES:
-            flash("Type d'opération invalide.", "error")
-            return redirect(url_for("transaction"))
-        if amount <= 0:
-            flash("Le montant doit être supérieur à zéro.", "error")
-            return redirect(url_for("transaction"))
-        if logic.TX_TYPES[tx_type]["wallet"] and not wallet_id:
-            flash("Sélectionnez l'opérateur concerné.", "error")
-            return redirect(url_for("transaction"))
-
-        conn = db.get_db()
-        agent = conn.execute("SELECT * FROM agent WHERE id=?", (session["agent_id"],)).fetchone()
-        conn.execute(
-            'INSERT INTO "transaction" '
-            "(agent_id, business_day, created_at, type, wallet_id, amount, commission) "
-            "VALUES (?,?,?,?,?,?,?)",
-            (agent["id"], agent["business_day"], db.now_str(), tx_type,
-             wallet_id if logic.TX_TYPES[tx_type]["wallet"] else None,
-             amount, commission),
+        tx_id, err = _save_operation(
+            tx_type=request.form.get("type"),
+            wallet_id=request.form.get("wallet_id") or None,
+            amount=_to_float(request.form.get("amount", "0")),
+            commission=_to_float(request.form.get("commission", "0")),
+            client_uid=request.form.get("client_uid") or None,
         )
-        conn.commit()
-        conn.close()
+        if err:
+            if _wants_json():
+                return jsonify({"ok": False, "error": err}), 400
+            flash(err, "error")
+            return redirect(url_for("transaction"))
+        if _wants_json():
+            return jsonify({"ok": True, "undo": tx_id})
         flash("Transaction enregistrée.", "success")
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("dashboard", undo=tx_id))
 
     return render_template("transaction.html", s=state, tx_types=logic.TX_TYPES)
 
@@ -427,41 +560,65 @@ def transaction():
 # ---------------------------------------------------------------------------
 @app.route("/reappro", methods=["GET", "POST"])
 def reappro():
-    r = require_onboarding()
-    if r:
-        return r
     state = compute_state()
 
     if request.method == "POST":
         tx_type = request.form.get("type")
-        wallet_id = request.form.get("wallet_id") or None
-        amount = _to_float(request.form.get("amount", "0"))
-
         if tx_type not in logic.REAPPRO_TYPES:
+            if _wants_json():
+                return jsonify({"ok": False, "error": "Type invalide."}), 400
             flash("Type de réapprovisionnement invalide.", "error")
             return redirect(url_for("reappro"))
-        if amount <= 0:
-            flash("Le montant doit être supérieur à zéro.", "error")
-            return redirect(url_for("reappro"))
-        if tx_type == "achat_float" and not wallet_id:
-            flash("Sélectionnez l'opérateur pour l'achat d'UV.", "error")
-            return redirect(url_for("reappro"))
 
-        conn = db.get_db()
-        agent = conn.execute("SELECT * FROM agent WHERE id=?", (session["agent_id"],)).fetchone()
-        conn.execute(
-            'INSERT INTO "transaction" '
-            "(agent_id, business_day, created_at, type, wallet_id, amount, commission) "
-            "VALUES (?,?,?,?,?,?,0)",
-            (agent["id"], agent["business_day"], db.now_str(), tx_type,
-             wallet_id if tx_type == "achat_float" else None, amount),
+        tx_id, err = _save_operation(
+            tx_type=tx_type,
+            wallet_id=request.form.get("wallet_id") or None,
+            amount=_to_float(request.form.get("amount", "0")),
+            client_uid=request.form.get("client_uid") or None,
         )
-        conn.commit()
-        conn.close()
+        if err:
+            if _wants_json():
+                return jsonify({"ok": False, "error": err}), 400
+            flash(err, "error")
+            return redirect(url_for("reappro"))
+        if _wants_json():
+            return jsonify({"ok": True, "undo": tx_id})
         flash("Réapprovisionnement enregistré.", "success")
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("dashboard", undo=tx_id))
 
     return render_template("reappro.html", s=state)
+
+
+# ---------------------------------------------------------------------------
+# API de synchronisation hors-ligne
+# ---------------------------------------------------------------------------
+@app.route("/api/sync", methods=["POST"])
+def api_sync():
+    """
+    Reçoit les opérations saisies hors-ligne (file d'attente du téléphone)
+    et les enregistre. Idempotent grâce au client_uid : renvoyer deux fois
+    la même opération ne crée jamais de doublon.
+    """
+    data = request.get_json(silent=True) or {}
+    ops = data.get("ops", [])
+    accepted, rejected = [], []
+    for op in ops[:200]:                      # garde-fou
+        uid = op.get("uid")
+        if not uid:
+            continue
+        tx_id, err = _save_operation(
+            tx_type=op.get("type"),
+            wallet_id=op.get("wallet_id") or None,
+            amount=_to_float(op.get("amount", 0)),
+            commission=_to_float(op.get("commission", 0)),
+            client_uid=str(uid)[:64],
+            created_at=str(op.get("created_at", ""))[:19] or None,
+        )
+        if err:
+            rejected.append({"uid": uid, "error": err})
+        else:
+            accepted.append(uid)
+    return jsonify({"ok": True, "accepted": accepted, "rejected": rejected})
 
 
 # ---------------------------------------------------------------------------
@@ -621,13 +778,15 @@ def historique():
 
 @app.route("/transaction/<int:tx_id>/delete", methods=["POST"])
 def delete_transaction(tx_id):
-    """Suppression douce d'une transaction saisie par erreur (avec trace)."""
+    """Suppression douce d'une transaction (annulation rapide ou correction)."""
     conn = db.get_db()
     conn.execute('UPDATE "transaction" SET deleted=1 WHERE id=? AND agent_id=?',
                  (tx_id, session["agent_id"]))
     conn.commit()
     conn.close()
-    flash("Transaction supprimée. Les soldes ont été recalculés.", "success")
+    flash("Opération annulée. Les soldes ont été recalculés.", "success")
+    if request.form.get("next") == "dashboard":
+        return redirect(url_for("dashboard"))
     return redirect(url_for("historique"))
 
 
@@ -799,6 +958,13 @@ def parametres():
                 session["auth"] = True
                 flash("Code de connexion enregistré.", "success")
 
+        elif action == "recovery":
+            code = _new_recovery_code()
+            conn.execute("UPDATE agent SET recovery_hash=? WHERE id=?",
+                         (generate_password_hash(code), agent["id"]))
+            session["show_recovery"] = code
+            flash("Nouveau code de secours généré. Notez-le : il ne sera plus affiché.", "success")
+
         conn.commit()
         conn.close()
         return redirect(url_for("parametres"))
@@ -810,7 +976,8 @@ def parametres():
     dispo = [op for op in logic.OPERATEURS if op not in active_ops]
     conn.close()
 
-    return render_template("parametres.html", agent=agent, wallets=wallets, dispo=dispo)
+    return render_template("parametres.html", agent=agent, wallets=wallets, dispo=dispo,
+                           recovery_code=session.pop("show_recovery", None))
 
 
 # ---------------------------------------------------------------------------

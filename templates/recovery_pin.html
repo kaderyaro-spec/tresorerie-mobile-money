@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Nouveau PIN{% endblock %}
+{% block header %}Nouveau code PIN{% endblock %}
+{% block nav %}{% endblock %}
+
+{% block content %}
+<div class="auth-screen">
+    <div class="auth-logo">🔒</div>
+    <h1 class="auth-title">Choisissez un nouveau PIN</h1>
+    <p class="auth-sub">Code vérifié ✓ — définissez votre nouveau code de connexion.</p>
+
+    <form method="post" class="auth-form">
+        <label>Nouveau code PIN (4 chiffres minimum)</label>
+        <input type="password" name="pin" inputmode="numeric" pattern="[0-9]*"
+               class="pin-input" placeholder="••••" minlength="4" required autofocus>
+
+        <label class="lbl-mt">Confirmez le code</label>
+        <input type="password" name="pin2" inputmode="numeric" pattern="[0-9]*"
+               class="pin-input" placeholder="••••" minlength="4" required>
+
+        <button type="submit" class="btn btn-primary btn-block btn-lg">Enregistrer et me connecter</button>
+    </form>
+</div>
+{% endblock %}

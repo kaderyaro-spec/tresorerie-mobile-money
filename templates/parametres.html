@@ -86,6 +86,23 @@
     <button type="submit" class="btn btn-secondary btn-block">Enregistrer le code</button>
 </form>
 
+<section class="block card-form">
+    <h2>🛟 Code de secours</h2>
+    {% if recovery_code %}
+    <div class="recovery-code">{{ recovery_code }}</div>
+    <div class="recovery-warn">⚠️ Notez ce code maintenant : il ne sera <strong>plus jamais affiché</strong>.
+        Il permet de récupérer votre compte si vous oubliez votre PIN.</div>
+    {% else %}
+    <p class="hint">Le code de secours permet de récupérer votre compte en cas d'oubli du PIN.
+       {% if not agent.recovery_hash %}Aucun code n'est défini : générez-en un !{% else %}
+       En générer un nouveau remplace l'ancien.{% endif %}</p>
+    {% endif %}
+    <form method="post">
+        <input type="hidden" name="action" value="recovery">
+        <button type="submit" class="btn btn-secondary btn-block">Générer un nouveau code de secours</button>
+    </form>
+</section>
+
 <form method="post" action="{{ url_for('logout') }}" class="block">
     <button type="submit" class="btn btn-outline btn-block">Se déconnecter</button>
 </form>

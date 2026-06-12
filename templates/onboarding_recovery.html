@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Code de secours{% endblock %}
+{% block header %}Votre code de secours{% endblock %}
+{% block nav %}{% endblock %}
+
+{% block content %}
+<div class="auth-screen">
+    <div class="auth-logo">🛟</div>
+    <h1 class="auth-title">Notez ce code !</h1>
+    <p class="auth-sub">Si vous oubliez votre code PIN, ce code de secours est le
+       <strong>seul moyen</strong> de récupérer votre compte.</p>
+
+    <div class="recovery-code" id="code">{{ code }}</div>
+    <button type="button" class="btn btn-secondary btn-block" id="copy-btn">📋 Copier le code</button>
+
+    <div class="recovery-warn">
+        ⚠️ Ce code ne sera <strong>plus jamais affiché</strong>. Notez-le sur papier
+        ou enregistrez-le dans un endroit sûr (pas dans ce téléphone uniquement).
+    </div>
+
+    <a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-block btn-lg">J'ai noté mon code, continuer</a>
+</div>
+
+<script>
+document.getElementById('copy-btn').addEventListener('click', function () {
+    var code = document.getElementById('code').textContent.trim();
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(code);
+        this.textContent = '✓ Copié !';
+    }
+});
+</script>
+{% endblock %}

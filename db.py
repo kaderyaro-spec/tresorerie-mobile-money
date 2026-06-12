@@ -63,7 +63,11 @@ class _Conn:
 
     def executescript(self, sql):
         if self.pg:
-            for stmt in sql.split(";"):
+            # Retirer les commentaires « -- ... » AVANT de découper sur « ; » :
+            # un point-virgule dans un commentaire casserait le découpage.
+            import re
+            clean = re.sub(r"--[^\n]*", "", sql)
+            for stmt in clean.split(";"):
                 if stmt.strip():
                     self._raw.execute(stmt)
         else:
@@ -165,7 +169,7 @@ CREATE TABLE IF NOT EXISTS dette (
     amount      REAL NOT NULL,
     note        TEXT,
     created_at  TEXT NOT NULL,
-    settled_at  TEXT                      -- NULL = en cours ; sinon date de règlement
+    settled_at  TEXT                      -- NULL = en cours, sinon date de règlement
 );
 
 CREATE TABLE IF NOT EXISTS cloture_line (

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Dettes clients{% endblock %}
+{% block header %}📓 Dettes clients{% endblock %}
+
+{% block content %}
+<div class="total-banner dette-banner">
+    <span class="total-label">Total des dettes en cours</span>
+    <span class="total-value">{{ total | fcfa }} <small>FCFA</small></span>
+    <div class="total-sub"><span>{{ en_cours | length }} client(s) doivent de l'argent</span></div>
+</div>
+
+<details class="add-dette" {% if not en_cours %}open{% endif %}>
+    <summary class="btn btn-primary btn-block">＋ Noter une nouvelle dette</summary>
+    <form method="post" class="card-form dette-form">
+        <label>Nom du client *</label>
+        <input type="text" name="client_name" placeholder="Ex : Moussa du garage" required>
+        <label class="lbl-mt">Téléphone (optionnel)</label>
+        <input type="tel" name="client_phone" inputmode="numeric" placeholder="07 00 00 00 00">
+        <label class="lbl-mt">Montant (FCFA) *</label>
+        <input type="number" name="amount" inputmode="numeric" class="med-input" placeholder="0" min="1" required>
+        <label class="lbl-mt">Note (optionnel)</label>
+        <input type="text" name="note" placeholder="Ex : dépôt avancé, paie ce soir">
+        <button type="submit" class="btn btn-primary btn-block">Enregistrer la dette</button>
+    </form>
+</details>
+
+{% if en_cours %}
+<h2 class="section-title">En cours</h2>
+<ul class="tx-list">
+    {% for d in en_cours %}
+    <li class="tx-item">
+        <div class="tx-main">
+            <span class="tx-type">{{ d.client_name }}</span>
+            <span class="tx-amount neg">{{ d.amount | fcfa }} FCFA</span>
+        </div>
+        <div class="tx-meta">
+            {% if d.client_phone %}<span>📞 {{ d.client_phone }}</span>{% endif %}
+            <span>{{ d.created_at }}</span>
+            {% if d.note %}<span>📝 {{ d.note }}</span>{% endif %}
+        </div>
+        <div class="dette-actions">
+            <form method="post" action="{{ url_for('dette_regler', dette_id=d.id) }}">
+                <button type="submit" class="btn btn-secondary">✓ Réglée</button>
+            </form>
+            <form method="post" action="{{ url_for('dette_delete', dette_id=d.id) }}"
+                  onsubmit="return confirm('Supprimer cette dette ?');">
+                <button type="submit" class="btn btn-outline">Supprimer</button>
+            </form>
+        </div>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p class="empty">Aucune dette en cours. 👍</p>
+{% endif %}
+
+{% if reglees %}
+<h2 class="section-title">Récemment réglées</h2>
+<ul class="tx-list dette-reglees">
+    {% for d in reglees %}
+    <li class="tx-item">
+        <div class="tx-main">
+            <span class="tx-type">✓ {{ d.client_name }}</span>
+            <span class="tx-amount pos">{{ d.amount | fcfa }} FCFA</span>
+        </div>
+        <div class="tx-meta"><span>Réglée le {{ d.settled_at }}</span></div>
+    </li>
+    {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

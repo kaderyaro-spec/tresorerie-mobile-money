@@ -37,6 +37,14 @@
 
     <p class="hint">Écart négatif = perte potentielle (erreur ou vol). Écart positif = erreur de saisie probable.</p>
 
+    {% if s.dettes > 0 %}
+    <div class="dette-info">
+        📓 <strong>Dettes clients en cours : {{ s.dettes | fcfa }} FCFA</strong><br>
+        <span>Un écart négatif sur la caisse peut s'expliquer par l'argent avancé à vos clients.
+        <a href="{{ url_for('dettes') }}">Voir le carnet</a></span>
+    </div>
+    {% endif %}
+
     <section class="comm-block">
         <h2>💰 Commissions du jour par opérateur</h2>
         <table class="comm-table">

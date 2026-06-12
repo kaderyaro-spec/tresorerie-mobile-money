@@ -157,6 +157,17 @@ CREATE TABLE IF NOT EXISTS cloture (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS dette (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id    INTEGER NOT NULL REFERENCES agent(id),
+    client_name  TEXT NOT NULL,
+    client_phone TEXT,
+    amount      REAL NOT NULL,
+    note        TEXT,
+    created_at  TEXT NOT NULL,
+    settled_at  TEXT                      -- NULL = en cours ; sinon date de règlement
+);
+
 CREATE TABLE IF NOT EXISTS cloture_line (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     cloture_id INTEGER NOT NULL REFERENCES cloture(id),

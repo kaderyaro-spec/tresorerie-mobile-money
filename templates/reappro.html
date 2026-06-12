@@ -40,6 +40,11 @@
         <h2>Montant</h2>
         <input type="number" name="amount" id="amount" inputmode="numeric"
                class="big-input" placeholder="0" min="1" required>
+        <div class="quick-amounts">
+            {% for m in [25000, 50000, 100000, 200000] %}
+            <button type="button" class="chip" data-amount="{{ m }}">{{ m | fcfa }}</button>
+            {% endfor %}
+        </div>
     </section>
 
     <div class="form-actions">
@@ -76,6 +81,15 @@
             btn.classList.add('selected');
             walletIdInput.value = btn.dataset.walletId;
             refreshSubmit();
+        });
+    });
+
+    // Montants rapides : un tap remplit le champ
+    document.querySelectorAll('.chip[data-amount]').forEach(function (chip) {
+        chip.addEventListener('click', function () {
+            document.getElementById('amount').value = this.dataset.amount;
+            document.querySelectorAll('.chip').forEach(function (c) { c.classList.remove('selected'); });
+            this.classList.add('selected');
         });
     });
 

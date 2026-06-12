@@ -60,7 +60,9 @@
     <a href="{{ url_for('transaction') }}" class="btn btn-primary btn-action">＋ Nouvelle transaction</a>
     <a href="{{ url_for('reappro') }}" class="btn btn-secondary btn-action">🔄 Réapprovisionner</a>
     <a href="{{ url_for('cloture') }}" class="btn btn-outline btn-action">🔒 Clôturer la journée</a>
-    <a href="{{ url_for('historique') }}" class="btn btn-outline btn-action">📋 Historique</a>
+    <a href="{{ url_for('dettes') }}" class="btn btn-outline btn-action">📓 Dettes clients
+        {% if s.dettes > 0 %}<span class="badge-dette">{{ s.dettes | fcfa }}</span>{% endif %}
+    </a>
 </div>
 
 <script>

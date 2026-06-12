@@ -54,5 +54,8 @@
     {% endif %}
 </section>
 
-<a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-block">Retour à l'accueil</a>
+<a href="https://wa.me/?text={{ wa_text }}" target="_blank" rel="noopener"
+   class="btn btn-whatsapp btn-block">📲 Partager le bilan sur WhatsApp</a>
+
+<a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-block" style="margin-top:10px">Retour à l'accueil</a>
 {% endblock %}

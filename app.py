@@ -109,7 +109,12 @@ def compute_state():
         "SELECT * FROM caisse WHERE agent_id=? LIMIT 1", (agent["id"],)
     ).fetchone()
     txs = db.current_transactions(conn, agent["id"], bday)
+    dettes_row = conn.execute(
+        "SELECT COALESCE(SUM(amount), 0) AS total FROM dette "
+        "WHERE agent_id=? AND settled_at IS NULL", (agent["id"],)
+    ).fetchone()
     conn.close()
+    dettes_total = dettes_row["total"] if dettes_row else 0
 
     txs_d = [dict(t) for t in txs]
 
@@ -153,6 +158,7 @@ def compute_state():
         "total": total,
         "commissions": commissions,
         "nb_alertes": nb_alertes,
+        "dettes": dettes_total,
     }
 
 
@@ -704,8 +710,41 @@ def cloture_recap(cloture_id):
 
     total_commission = sum(l["commission"] for l in lines)
     total_ecart = sum(l["ecart"] for l in lines)
+
+    # Texte de partage WhatsApp (compte-rendu au propriétaire du point)
+    agent = current_agent()
+    conn2 = db.get_db()
+    drow = conn2.execute(
+        "SELECT COALESCE(SUM(amount),0) AS total FROM dette "
+        "WHERE agent_id=? AND settled_at IS NULL", (agent["id"],)).fetchone()
+    conn2.close()
+    dettes_total = drow["total"] if drow else 0
+
+    txt = [f"🔒 BILAN DU {cl['date']}"]
+    if agent["shop_name"]:
+        txt.append(f"🏪 {agent['shop_name']}")
+    txt.append("")
+    txt.append(f"💰 Commissions du jour : {fmt(total_commission)} F")
+    signe = "+" if total_ecart > 0 else ""
+    txt.append(f"📊 Écart global : {signe}{fmt(total_ecart)} F")
+    txt.append("")
+    txt.append("Par portefeuille :")
+    for l in lines:
+        s2 = "+" if l["ecart"] > 0 else ""
+        txt.append(f"• {l['label']} : réel {fmt(l['reel'])} F "
+                   f"(écart {s2}{fmt(l['ecart'])} F)")
+    if dettes_total > 0:
+        txt.append("")
+        txt.append(f"📓 Dettes clients en cours : {fmt(dettes_total)} F")
+    txt.append("")
+    txt.append("— Généré par Trésorerie Mobile Money")
+
+    from urllib.parse import quote
+    wa_text = quote("\n".join(txt))
+
     return render_template("cloture_recap.html", cl=cl, lines=lines,
-                           total_commission=total_commission, total_ecart=total_ecart)
+                           total_commission=total_commission, total_ecart=total_ecart,
+                           wa_text=wa_text)
 
 
 # ---------------------------------------------------------------------------
@@ -726,6 +765,69 @@ def journal():
     ).fetchall()
     conn.close()
     return render_template("journal.html", clotures=clotures)
+
+
+# ---------------------------------------------------------------------------
+# Carnet de dettes clients
+# ---------------------------------------------------------------------------
+@app.route("/dettes", methods=["GET", "POST"])
+def dettes():
+    conn = db.get_db()
+    aid = session["agent_id"]
+
+    if request.method == "POST":
+        name = request.form.get("client_name", "").strip()
+        phone = normalize_phone(request.form.get("client_phone", ""))
+        amount = _to_float(request.form.get("amount", "0"))
+        note = request.form.get("note", "").strip()
+        if not name:
+            flash("Le nom du client est obligatoire.", "error")
+        elif amount <= 0:
+            flash("Le montant doit être supérieur à zéro.", "error")
+        else:
+            conn.execute(
+                "INSERT INTO dette (agent_id, client_name, client_phone, amount, note, created_at) "
+                "VALUES (?,?,?,?,?,?)",
+                (aid, name, phone or None, amount, note or None, db.now_str()),
+            )
+            conn.commit()
+            flash(f"Dette de {fmt(amount)} FCFA notée pour {name}.", "success")
+        conn.close()
+        return redirect(url_for("dettes"))
+
+    en_cours = conn.execute(
+        "SELECT * FROM dette WHERE agent_id=? AND settled_at IS NULL "
+        "ORDER BY created_at DESC", (aid,)
+    ).fetchall()
+    reglees = conn.execute(
+        "SELECT * FROM dette WHERE agent_id=? AND settled_at IS NOT NULL "
+        "ORDER BY settled_at DESC LIMIT 20", (aid,)
+    ).fetchall()
+    conn.close()
+    total = sum(d["amount"] for d in en_cours)
+    return render_template("dettes.html", en_cours=en_cours, reglees=reglees, total=total)
+
+
+@app.route("/dettes/<int:dette_id>/regler", methods=["POST"])
+def dette_regler(dette_id):
+    conn = db.get_db()
+    conn.execute("UPDATE dette SET settled_at=? WHERE id=? AND agent_id=?",
+                 (db.now_str(), dette_id, session["agent_id"]))
+    conn.commit()
+    conn.close()
+    flash("Dette marquée comme réglée. ✓", "success")
+    return redirect(url_for("dettes"))
+
+
+@app.route("/dettes/<int:dette_id>/delete", methods=["POST"])
+def dette_delete(dette_id):
+    conn = db.get_db()
+    conn.execute("DELETE FROM dette WHERE id=? AND agent_id=?",
+                 (dette_id, session["agent_id"]))
+    conn.commit()
+    conn.close()
+    flash("Dette supprimée.", "success")
+    return redirect(url_for("dettes"))
 
 
 # ---------------------------------------------------------------------------

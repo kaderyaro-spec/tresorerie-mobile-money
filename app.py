@@ -44,7 +44,7 @@ app.jinja_env.filters["fcfa"] = fmt
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "16"
+ASSET_VERSION = "17"
 
 
 @app.context_processor
@@ -127,9 +127,18 @@ def compute_state():
     sms_row = conn.execute(
         "SELECT COUNT(*) AS n FROM sms_inbox WHERE agent_id=? AND status='pending'",
         (agent["id"],)).fetchone()
+    # Dettes en cours NON encore imputées à une clôture, regroupées par poste
+    # (wallet_id NULL = caisse). Servent à ajuster le théorique de la clôture.
+    dette_poste = {}
+    for r in conn.execute(
+        "SELECT wallet_id, COALESCE(SUM(amount),0) AS total FROM dette "
+        "WHERE agent_id=? AND settled_at IS NULL AND accounted=0 "
+        "GROUP BY wallet_id", (agent["id"],)).fetchall():
+        dette_poste[r["wallet_id"]] = r["total"]
     conn.close()
     dettes_total = dettes_row["total"] if dettes_row else 0
     sms_pending = sms_row["n"] if sms_row else 0
+    cash_dette = dette_poste.get(None, 0)
 
     txs_d = [dict(t) for t in txs]
 
@@ -154,6 +163,7 @@ def compute_state():
             "threshold": w["alert_threshold"],
             "voyant": logic.voyant(bal, w["alert_threshold"]),
             "commission": commission,
+            "dette": dette_poste.get(w["id"], 0),
             "prediction": logic.predict_depletion(bal, w_txs),
         })
 
@@ -173,6 +183,7 @@ def compute_state():
         "commissions": commissions,
         "nb_alertes": nb_alertes,
         "dettes": dettes_total,
+        "cash_dette": cash_dette,
         "sms_pending": sms_pending,
     }
 
@@ -932,32 +943,43 @@ def cloture():
         )
         cloture_id = cur.lastrowid
 
-        # Lignes portefeuilles
+        # Lignes portefeuilles — théorique AJUSTÉ des dettes du poste
         for w in state["wallets"]:
-            reel = _to_float(request.form.get(f"reel_wallet_{w['id']}", w["balance"]))
-            ec = logic.ecart(reel, w["balance"])
+            theo = w["balance"] - w["dette"]          # dette déduite du poste
+            reel = _to_float(request.form.get(f"reel_wallet_{w['id']}", theo))
+            ec = logic.ecart(reel, theo)
             conn.execute(
                 "INSERT INTO cloture_line "
-                "(cloture_id, label, kind, ref_id, theorique, reel, ecart, commission) "
-                "VALUES (?,?,?,?,?,?,?,?)",
-                (cloture_id, w["operator"], "wallet", w["id"], w["balance"], reel, ec,
-                 w["commission"]),
+                "(cloture_id, label, kind, ref_id, theorique, reel, ecart, commission, dette) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (cloture_id, w["operator"], "wallet", w["id"], theo, reel, ec,
+                 w["commission"], w["dette"]),
             )
             # Report : le solde réel devient l'ouverture du lendemain
             conn.execute("UPDATE wallet SET opening_balance=? WHERE id=?", (reel, w["id"]))
 
-        # Ligne caisse
-        reel_cash = _to_float(request.form.get("reel_cash", state["cash"]))
-        ec_cash = logic.ecart(reel_cash, state["cash"])
+        # Ligne caisse — théorique ajusté des dettes imputées à la caisse
+        theo_cash = state["cash"] - state["cash_dette"]
+        reel_cash = _to_float(request.form.get("reel_cash", theo_cash))
+        ec_cash = logic.ecart(reel_cash, theo_cash)
         conn.execute(
             "INSERT INTO cloture_line "
-            "(cloture_id, label, kind, ref_id, theorique, reel, ecart, commission) "
-            "VALUES (?,?,?,?,?,?,?,0)",
-            (cloture_id, "Caisse", "cash", None, state["cash"], reel_cash, ec_cash),
+            "(cloture_id, label, kind, ref_id, theorique, reel, ecart, commission, dette) "
+            "VALUES (?,?,?,?,?,?,?,0,?)",
+            (cloture_id, "Caisse", "cash", None, theo_cash, reel_cash, ec_cash,
+             state["cash_dette"]),
         )
         conn.execute(
             "UPDATE caisse SET opening_balance=? WHERE agent_id=?",
             (reel_cash, agent["id"]),
+        )
+
+        # Les dettes en cours non encore imputées sont rattachées à cette clôture
+        # (elles ne seront plus déduites lors des clôtures suivantes).
+        conn.execute(
+            "UPDATE dette SET accounted=1, cloture_id=? "
+            "WHERE agent_id=? AND settled_at IS NULL AND accounted=0",
+            (cloture_id, agent["id"]),
         )
 
         # Avance de la journée comptable : TOUJOURS +1 jour par rapport à la
@@ -1084,24 +1106,39 @@ def dettes():
         phone = normalize_phone(request.form.get("client_phone", ""))
         amount = _to_float(request.form.get("amount", "0"))
         note = request.form.get("note", "").strip()
+        op_type = request.form.get("op_type", "")
+        wallet_id = request.form.get("wallet_id") or None
+        if op_type not in ("depot_client", "retrait_client", "retrait_caisse"):
+            op_type = None
+        # « retrait d'espèces caisse » → caisse (pas de wallet) ; sinon un wallet requis
+        if op_type == "retrait_caisse":
+            wallet_id = None
         if not name:
             flash("Le nom du client est obligatoire.", "error")
         elif amount <= 0:
             flash("Le montant doit être supérieur à zéro.", "error")
+        elif not op_type:
+            flash("Précisez la nature de la dette (dépôt, retrait, retrait caisse).", "error")
+        elif op_type in ("depot_client", "retrait_client") and not wallet_id:
+            flash("Sélectionnez le portefeuille (UV) concerné.", "error")
         else:
             conn.execute(
-                "INSERT INTO dette (agent_id, client_name, client_phone, amount, note, created_at) "
-                "VALUES (?,?,?,?,?,?)",
-                (aid, name, phone or None, amount, note or None, db.now_str()),
+                "INSERT INTO dette (agent_id, client_name, client_phone, amount, note, "
+                " op_type, wallet_id, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                (aid, name, phone or None, amount, note or None, op_type, wallet_id,
+                 db.now_str()),
             )
             conn.commit()
             flash(f"Dette de {fmt(amount)} FCFA notée pour {name}.", "success")
         conn.close()
         return redirect(url_for("dettes"))
 
+    wallets = conn.execute(
+        "SELECT * FROM wallet WHERE agent_id=? AND active=1 ORDER BY id", (aid,)).fetchall()
     en_cours = conn.execute(
-        "SELECT * FROM dette WHERE agent_id=? AND settled_at IS NULL "
-        "ORDER BY created_at DESC", (aid,)
+        "SELECT d.*, w.operator AS operator FROM dette d "
+        "LEFT JOIN wallet w ON d.wallet_id = w.id "
+        "WHERE d.agent_id=? AND d.settled_at IS NULL ORDER BY d.created_at DESC", (aid,)
     ).fetchall()
     reglees = conn.execute(
         "SELECT * FROM dette WHERE agent_id=? AND settled_at IS NOT NULL "
@@ -1109,7 +1146,8 @@ def dettes():
     ).fetchall()
     conn.close()
     total = sum(d["amount"] for d in en_cours)
-    return render_template("dettes.html", en_cours=en_cours, reglees=reglees, total=total)
+    return render_template("dettes.html", en_cours=en_cours, reglees=reglees, total=total,
+                           wallets=wallets, tx_types=logic.TX_TYPES)
 
 
 @app.route("/dettes/<int:dette_id>/regler", methods=["POST"])

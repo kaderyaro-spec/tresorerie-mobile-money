@@ -18,8 +18,27 @@
         <input type="tel" name="client_phone" inputmode="numeric" placeholder="07 00 00 00 00">
         <label class="lbl-mt">Montant (FCFA) *</label>
         <input type="number" name="amount" inputmode="numeric" class="med-input" placeholder="0" min="1" required>
+
+        <label class="lbl-mt">Nature de la dette *</label>
+        <select name="op_type" id="dette-type" required>
+            <option value="">— Choisir —</option>
+            <option value="depot_client">Dépôt client (sur UV opérateur)</option>
+            <option value="retrait_client">Retrait client (sur UV opérateur)</option>
+            <option value="retrait_caisse">Retrait d'espèces de la caisse</option>
+        </select>
+
+        <div id="dette-wallet" hidden>
+            <label class="lbl-mt">Portefeuille (UV) concerné *</label>
+            <select name="wallet_id">
+                <option value="">— Choisir —</option>
+                {% for w in wallets %}
+                <option value="{{ w.id }}">{{ w.operator }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
         <label class="lbl-mt">Note (optionnel)</label>
-        <input type="text" name="note" placeholder="Ex : dépôt avancé, paie ce soir">
+        <input type="text" name="note" placeholder="Ex : paie ce soir">
         <button type="submit" class="btn btn-primary btn-block">Enregistrer la dette</button>
     </form>
 </details>
@@ -34,6 +53,10 @@
             <span class="tx-amount neg">{{ d.amount | fcfa }} FCFA</span>
         </div>
         <div class="tx-meta">
+            {% if d.op_type %}
+            <span>{{ tx_types[d.op_type].label if d.op_type in tx_types else d.op_type }}{% if d.operator %} · {{ d.operator }}{% elif d.op_type == 'retrait_caisse' %} · Caisse{% endif %}</span>
+            {% endif %}
+            {% if d.accounted %}<span>✔ imputée à la clôture</span>{% endif %}
             {% if d.client_phone %}<span>📞 {{ d.client_phone }}</span>{% endif %}
             <span>{{ d.created_at }}</span>
             {% if d.note %}<span>📝 {{ d.note }}</span>{% endif %}
@@ -68,4 +91,21 @@
     {% endfor %}
 </ul>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    var typeSel = document.getElementById('dette-type');
+    var walletBox = document.getElementById('dette-wallet');
+    if (!typeSel) return;
+    function refresh() {
+        var needWallet = (typeSel.value === 'depot_client' || typeSel.value === 'retrait_client');
+        walletBox.hidden = !needWallet;
+        walletBox.querySelector('select').required = needWallet;
+    }
+    typeSel.addEventListener('change', refresh);
+    refresh();
+})();
+</script>
 {% endblock %}

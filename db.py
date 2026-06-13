@@ -194,6 +194,10 @@ CREATE TABLE IF NOT EXISTS dette (
     client_phone TEXT,
     amount      REAL NOT NULL,
     note        TEXT,
+    op_type     TEXT,                     -- depot_client / retrait_client / retrait_caisse
+    wallet_id   INTEGER,                  -- poste UV concerné (NULL = caisse)
+    accounted   INTEGER NOT NULL DEFAULT 0,  -- 1 = déjà imputée à une clôture
+    cloture_id  INTEGER,                  -- clôture qui l'a imputée
     created_at  TEXT NOT NULL,
     settled_at  TEXT                      -- NULL = en cours, sinon date de règlement
 );
@@ -207,7 +211,8 @@ CREATE TABLE IF NOT EXISTS cloture_line (
     theorique  REAL NOT NULL,
     reel       REAL NOT NULL,
     ecart      REAL NOT NULL,
-    commission REAL NOT NULL DEFAULT 0  -- commissions du jour pour cet opérateur
+    commission REAL NOT NULL DEFAULT 0,  -- commissions du jour pour cet opérateur
+    dette      REAL NOT NULL DEFAULT 0   -- dettes clients imputées à ce poste
 );
 """
 
@@ -237,6 +242,17 @@ def _migrate(conn):
     # L'index se crée APRÈS l'ajout de la colonne (bases existantes incluses).
     conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_tx_client_uid '
                  'ON "transaction"(client_uid)')
+    if "dette" not in cols:
+        conn.execute("ALTER TABLE cloture_line ADD COLUMN dette REAL NOT NULL DEFAULT 0")
+    dcols = conn.column_names("dette")
+    if "op_type" not in dcols:
+        conn.execute("ALTER TABLE dette ADD COLUMN op_type TEXT")
+    if "wallet_id" not in dcols:
+        conn.execute("ALTER TABLE dette ADD COLUMN wallet_id INTEGER")
+    if "accounted" not in dcols:
+        conn.execute("ALTER TABLE dette ADD COLUMN accounted INTEGER NOT NULL DEFAULT 0")
+    if "cloture_id" not in dcols:
+        conn.execute("ALTER TABLE dette ADD COLUMN cloture_id INTEGER")
 
 
 def init_db():

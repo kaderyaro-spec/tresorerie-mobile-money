@@ -18,22 +18,31 @@
         <tbody>
             {% for w in s.wallets %}
             <tr>
-                <td><span class="op-name">{{ op_logo(w.operator, 24) }} {{ w.operator }}</span></td>
+                <td><span class="op-name">{{ op_logo(w.operator, 24) }} {{ w.operator }}</span>
+                    {% if w.dette > 0 %}<small class="dette-tag">− dette {{ w.dette | fcfa }}</small>{% endif %}
+                </td>
                 <td><input type="text" inputmode="numeric" name="reel_wallet_{{ w.id }}"
-                           class="reel-input" data-theo="{{ w.balance }}"
-                           value="{{ w.balance | fcfa }}"></td>
+                           class="reel-input" data-theo="{{ w.balance - w.dette }}"
+                           value="{{ (w.balance - w.dette) | fcfa }}"></td>
                 <td class="ecart-cell">0</td>
             </tr>
             {% endfor %}
             <tr class="row-cash">
-                <td><span class="op-name">💵 Caisse</span></td>
+                <td><span class="op-name">💵 Caisse</span>
+                    {% if s.cash_dette > 0 %}<small class="dette-tag">− dette {{ s.cash_dette | fcfa }}</small>{% endif %}
+                </td>
                 <td><input type="text" inputmode="numeric" name="reel_cash"
-                           class="reel-input" data-theo="{{ s.cash }}"
-                           value="{{ s.cash | fcfa }}"></td>
+                           class="reel-input" data-theo="{{ s.cash - s.cash_dette }}"
+                           value="{{ (s.cash - s.cash_dette) | fcfa }}"></td>
                 <td class="ecart-cell">0</td>
             </tr>
         </tbody>
     </table>
+    {% if s.dettes > 0 %}
+    <p class="hint">Les dettes clients en cours sont <strong>déduites du théorique</strong> du
+       poste concerné (montant « réel » attendu déjà ajusté). Une fois clôturées, elles ne
+       seront plus redéduites.</p>
+    {% endif %}
 
     <p class="hint">Écart négatif = perte potentielle (erreur ou vol). Écart positif = erreur de saisie probable.</p>
 

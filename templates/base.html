@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0d6e5c">
     <title>{% block title %}Trésorerie Mobile Money{% endblock %}</title>
     <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ asset_v }}">
 </head>
 <body>
     <header class="topbar">
@@ -64,7 +64,7 @@
         navigator.serviceWorker.register("{{ url_for('static', filename='sw.js') }}");
       }
     </script>
-    <script src="{{ url_for('static', filename='offline.js') }}"></script>
+    <script src="{{ url_for('static', filename='offline.js') }}?v={{ asset_v }}"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

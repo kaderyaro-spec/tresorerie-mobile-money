@@ -2,7 +2,7 @@
 // Réseau d'abord avec délai maxi de 4 s : si le réseau ne répond pas à temps
 // (hors-ligne, réseau lent, serveur endormi), on sert la dernière version en
 // cache pour que l'application reste utilisable.
-const CACHE = "tresorerie-v14";
+const CACHE = "tresorerie-v15";
 
 self.addEventListener("install", (e) => {
   self.skipWaiting();
@@ -42,7 +42,19 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;            // les POST passent en direct
   const url = new URL(req.url);
   if (url.pathname.startsWith("/api/")) return; // l'API gère son propre échec
-  // Pages HTML : 4 s maxi ; ressources statiques : 8 s (elles changent peu).
-  const isHTML = (req.headers.get("accept") || "").includes("text/html");
-  e.respondWith(networkFirst(req, isHTML ? 4000 : 8000));
+
+  // Fichiers statiques versionnés (?v=…) : « cache d'abord » → rapides ET jamais
+  // périmés (l'URL change à chaque mise à jour, donc le cache se renouvelle seul).
+  if (url.pathname.startsWith("/static/")) {
+    e.respondWith(
+      caches.match(req).then((cached) => cached || fetch(req).then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(req, copy));
+        return res;
+      }))
+    );
+    return;
+  }
+  // Pages HTML : réseau d'abord (4 s) puis cache si le réseau ne répond pas.
+  e.respondWith(networkFirst(req, 4000));
 });

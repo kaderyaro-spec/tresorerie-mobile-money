@@ -221,12 +221,16 @@ input:focus, select:focus { outline: none; border-color: var(--green); }
 .comm-block h2 { font-size: 16px; margin: 0 0 10px; }
 .comm-table { width: 100%; border-collapse: collapse; }
 .comm-table td { padding: 8px 4px; border-bottom: 1px solid #d4e4df; }
-.comm-val { text-align: right; font-weight: 700; }
+.comm-val { text-align: center; font-weight: 700; }
 .comm-total td { border-bottom: none; border-top: 2px solid var(--green); font-weight: 800; font-size: 16px; padding-top: 10px; }
 
 /* Historique */
-.filters { display: flex; gap: 8px; margin-bottom: 14px; }
-.filters select { padding: 10px; font-size: 14px; }
+.filters { display: flex; gap: 6px; margin-bottom: 14px; }
+.filters select {
+    flex: 1; min-width: 0; padding: 9px 6px; font-size: 12px;
+    border: 1.5px solid var(--line); border-radius: 10px; background: #fff;
+    text-overflow: ellipsis;
+}
 .tx-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
 .tx-item { background: var(--card); border-radius: 14px; padding: 14px; position: relative; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
 .tx-main { display: flex; justify-content: space-between; align-items: center; }
@@ -324,6 +328,21 @@ input:focus, select:focus { outline: none; border-color: var(--green); }
 .export-row .btn { flex: 1; padding: 12px; font-size: 14px; }
 
 /* Paramètres */
+.settings-cat { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); font-weight: 800; margin: 20px 6px 8px; }
+.settings-cat:first-child { margin-top: 4px; }
+.param-link { text-decoration: none; color: var(--ink); border-bottom: none !important; font-weight: 600; }
+.param-link span:last-child { color: var(--muted); font-size: 20px; }
+.tx-meta-inline { font-size: 12px; color: var(--muted); }
+
+/* Page légale (conditions générales) */
+.legal { background: var(--card); border-radius: var(--radius); padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+.legal h2 { font-size: 15px; margin: 18px 0 6px; color: var(--green-d); }
+.legal h2:first-of-type { margin-top: 6px; }
+.legal p, .legal li { font-size: 13.5px; line-height: 1.6; color: var(--ink); }
+.legal ul { padding-left: 18px; }
+.legal-date { color: var(--muted); font-style: italic; font-size: 12.5px; margin-bottom: 6px; }
+.legal .btn { margin-top: 18px; }
+
 .param-line { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); margin: 0; }
 .param-line span { color: var(--muted); }
 .add-op { margin-top: 16px; padding-top: 16px; border-top: 1.5px solid var(--line); }

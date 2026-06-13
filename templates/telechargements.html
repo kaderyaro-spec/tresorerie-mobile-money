@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Téléchargements{% endblock %}
+{% block header %}⬇ Téléchargements{% endblock %}
+
+{% block content %}
+<p class="intro">Téléchargez votre historique par journée, au format CSV (Excel) ou PDF.</p>
+
+<section class="block card-form">
+    <h2>📂 Tout l'historique</h2>
+    <div class="export-row">
+        <a href="{{ url_for('export_csv') }}" class="btn btn-outline">⬇ CSV</a>
+        <a href="{{ url_for('export_pdf') }}" class="btn btn-outline">⬇ PDF</a>
+    </div>
+</section>
+
+<h2 class="section-title">Par jour</h2>
+{% if jours %}
+<ul class="tx-list">
+    {% for j in jours %}
+    <li class="tx-item">
+        <div class="tx-main">
+            <span class="tx-type">📅 {{ j.jour }}</span>
+            <span class="tx-meta-inline">{{ j.n }} opération(s)</span>
+        </div>
+        <div class="export-row">
+            <a href="{{ url_for('export_csv', jour=j.jour) }}" class="btn btn-outline">⬇ CSV</a>
+            <a href="{{ url_for('export_pdf', jour=j.jour) }}" class="btn btn-outline">⬇ PDF</a>
+        </div>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p class="empty">Aucune opération enregistrée pour le moment.</p>
+{% endif %}
+{% endblock %}

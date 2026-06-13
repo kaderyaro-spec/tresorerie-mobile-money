@@ -29,16 +29,15 @@
 
 <section class="block card-form">
     <h2>📊 Écarts constatés</h2>
-    <table class="cloture-table">
-        <colgroup><col style="width:32%"><col style="width:21%"><col style="width:21%"><col style="width:26%"></colgroup>
+    <table class="cloture-table cloture-3col">
+        <colgroup><col style="width:42%"><col style="width:30%"><col style="width:28%"></colgroup>
         <thead>
-            <tr><th>Ligne</th><th>Théorique</th><th>Réel</th><th class="th-ecart">Écart</th></tr>
+            <tr><th>Ligne</th><th>Montant réel</th><th class="th-ecart">Écart</th></tr>
         </thead>
         <tbody>
         {% for l in lines %}
             <tr>
                 <td><span class="op-name">{% if l.kind == 'wallet' %}{{ op_logo(l.label, 22) }} {% endif %}{{ l.label }}</span></td>
-                <td class="theo">{{ l.theorique | fcfa }}</td>
                 <td>{{ l.reel | fcfa }}</td>
                 <td class="ecart-cell {% if l.ecart < 0 %}ecart-neg{% elif l.ecart > 0 %}ecart-pos{% endif %}">
                     {% if l.ecart > 0 %}+{% endif %}{{ l.ecart | fcfa }}

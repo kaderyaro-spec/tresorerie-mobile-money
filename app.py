@@ -41,6 +41,17 @@ def fmt(montant):
 app.jinja_env.filters["fcfa"] = fmt
 
 
+# Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
+# Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
+# version (fini les anciens styles affichés depuis le cache de l'appareil).
+ASSET_VERSION = "15"
+
+
+@app.context_processor
+def _inject_asset_version():
+    return {"asset_v": ASSET_VERSION}
+
+
 # Identité visuelle de chaque opérateur : pastille colorée + initiales.
 # Représentation originale (couleurs évocatrices), pas de logo de marque.
 OPERATOR_STYLE = {
@@ -174,7 +185,7 @@ def require_onboarding():
 
 # Points d'entrée accessibles sans être connecté
 PUBLIC_ENDPOINTS = {
-    "login", "signup", "static", "index", "ping", "api_sms",
+    "login", "signup", "static", "index", "ping", "api_sms", "conditions",
     "onboarding_otp", "onboarding_pin", "onboarding_operators", "onboarding_services",
     "recovery_request", "recovery_newpin",
 }
@@ -299,6 +310,11 @@ def index():
     if session.get("auth") and current_agent() is not None:
         return redirect(url_for("dashboard"))
     return redirect(url_for("login"))
+
+
+@app.route("/conditions")
+def conditions():
+    return render_template("conditions.html")
 
 
 # ---------------------------------------------------------------------------
@@ -1025,6 +1041,23 @@ def journal():
     ).fetchall()
     conn.close()
     return render_template("journal.html", clotures=clotures)
+
+
+# ---------------------------------------------------------------------------
+# Journal des téléchargements : un export CSV/PDF par jour d'activité
+# ---------------------------------------------------------------------------
+@app.route("/telechargements")
+def telechargements():
+    conn = db.get_db()
+    jours = conn.execute(
+        'SELECT business_day AS jour, COUNT(*) AS n, '
+        '       MIN(created_at) AS premier, MAX(created_at) AS dernier '
+        'FROM "transaction" WHERE agent_id=? AND deleted=0 '
+        'GROUP BY business_day ORDER BY business_day DESC',
+        (session["agent_id"],),
+    ).fetchall()
+    conn.close()
+    return render_template("telechargements.html", jours=jours)
 
 
 # ---------------------------------------------------------------------------

@@ -279,7 +279,13 @@ def parse_sms(body, sender="", known_operators=None):
                                  "envoye", "envoyé", "envoi")):
         typ = "depot_client"
 
-    return {"operator": operator, "type": typ, "amount": amount}
+    # Référence unique de l'opérateur (anti-doublon en création automatique)
+    ref = None
+    mr = re.search(r"id\s*(?:de\s*)?transaction\s*:?\s*([a-z0-9.\-]{4,})", text)
+    if mr:
+        ref = mr.group(1).strip(".").upper()
+
+    return {"operator": operator, "type": typ, "amount": amount, "ref": ref}
 
 
 def daily_commission(operator: str, volume: float):

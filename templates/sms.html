@@ -4,8 +4,9 @@
 {% block header %}📩 SMS détectés{% endblock %}
 
 {% block content %}
-<p class="intro">Les SMS de vos opérateurs sont analysés automatiquement.
-   Vérifiez et confirmez chaque opération en un geste — rien n'est enregistré sans vous.</p>
+<p class="intro">Quand la lecture est sûre, la transaction est créée <strong>automatiquement</strong>.
+   Ici n'apparaissent que les SMS <strong>incertains</strong> (opérateur ou montant non reconnus) :
+   vérifiez et confirmez d'un geste.</p>
 
 {% if pending %}
 <ul class="tx-list">

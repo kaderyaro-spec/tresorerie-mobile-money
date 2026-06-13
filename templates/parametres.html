@@ -145,8 +145,21 @@
 
 <section class="block card-form">
     <h2>📩 Lecture automatique des SMS</h2>
-    <p class="hint">Faites remonter automatiquement les SMS de vos opérateurs : les
-       opérations détectées s'affichent à confirmer d'un tap (écran « SMS détectés »).</p>
+    <p class="hint">Faites remonter automatiquement les SMS (et notifications) de vos
+       opérateurs : les transactions sont créées automatiquement, ou mises en attente
+       de confirmation si la lecture est incertaine.</p>
+
+    <form method="post" class="sms-auto-row">
+        <input type="hidden" name="action" value="sms_auto">
+        <label class="switch-label">
+            <input type="checkbox" name="sms_auto" {% if agent.sms_auto %}checked{% endif %}
+                   onchange="this.form.submit()">
+            <span>Créer les transactions <strong>automatiquement</strong> (sans confirmation)</span>
+        </label>
+        <p class="hint">Sécurité : une opération n'est créée seule que si l'opérateur, le sens,
+           le montant <strong>et</strong> l'identifiant de transaction sont lus correctement
+           (l'identifiant évite tout doublon). Sinon, elle attend votre confirmation.</p>
+    </form>
 
     {% if agent.sms_token %}
     <label>Votre lien personnel (à coller dans l'app de transfert)</label>
@@ -154,19 +167,32 @@
     <button type="button" class="btn btn-secondary btn-block" id="copy-sms-url">📋 Copier le lien</button>
 
     <details class="sms-guide">
-        <summary>Comment l'installer (3 minutes)</summary>
+        <summary>📨 Opérateurs par SMS (Orange, MTN, Moov)</summary>
         <ol>
-            <li>Installez une app gratuite de transfert SMS depuis le Play Store
-                (ex. « SMS Forwarder », « SMS to URL Forwarder »).</li>
-            <li>Créez une règle : <strong>méthode POST</strong>, <strong>URL = le lien ci-dessus</strong>.</li>
-            <li>Corps du message : champ <code>body</code> = contenu du SMS (placeholder
-                <code>%text%</code> ou <code>{{ '{{message}}' }}</code> selon l'app),
-                champ <code>sender</code> = expéditeur.</li>
-            <li>Filtrez sur les expéditeurs de vos opérateurs (Orange, Wave, MTN, Moov)
-                pour ne transférer que ces SMS.</li>
+            <li>Installez une app gratuite de transfert SMS (ex. « SMS to URL Forwarder »).</li>
+            <li>Règle : <strong>POST</strong> vers <strong>le lien ci-dessus</strong>.</li>
+            <li>Corps : champ <code>body</code> = contenu du SMS (<code>%text%</code> ou
+                <code>{{ '{{message}}' }}</code> selon l'app), <code>sender</code> = expéditeur.</li>
+            <li>Filtrez sur les expéditeurs (Orange, MTN, Moov) pour ne transférer qu'eux.</li>
         </ol>
-        <p class="hint">⚠️ Ce lien est secret : ne le partagez pas. En cas de doute, regénérez-le.</p>
     </details>
+
+    <details class="sms-guide">
+        <summary>🌊 Wave (par notification de l'app marchand)</summary>
+        <p class="hint">Wave n'envoie pas de SMS : les transactions arrivent en
+           <strong>notification</strong> dans l'app marchand. On les capte autrement :</p>
+        <ol>
+            <li>Installez une app gratuite de <strong>transfert de notifications</strong>
+                (ex. « Notification Forwarder », ou MacroDroid / Tasker).</li>
+            <li>Réglez-la pour capter les notifications de l'<strong>app Wave Business</strong>.</li>
+            <li>Même règle : <strong>POST</strong> vers le lien ci-dessus, le <strong>texte de
+                la notification</strong> dans le champ <code>body</code>, <code>sender=Wave</code>.</li>
+        </ol>
+        <p class="hint">⚠️ Le détecteur Wave par notification sera affiné dès que vous nous
+           enverrez des exemples de notifications Wave (dépôt + retrait).</p>
+    </details>
+
+    <p class="hint">⚠️ Ce lien est secret : ne le partagez pas. En cas de doute, regénérez-le.</p>
     {% else %}
     <p class="hint">Générez d'abord votre lien personnel sécurisé.</p>
     {% endif %}

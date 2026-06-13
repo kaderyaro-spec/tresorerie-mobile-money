@@ -287,6 +287,9 @@ input:focus, select:focus { outline: none; border-color: var(--green); }
 .section-title { font-size: 16px; margin: 18px 0 10px; }
 
 /* Lecture des SMS */
+.sms-auto-row { margin: 4px 0 14px; padding-bottom: 14px; border-bottom: 1.5px solid var(--line); }
+.switch-label { display: flex; align-items: flex-start; gap: 10px; font-weight: 600; color: var(--ink); }
+.switch-label input { width: 22px; height: 22px; flex: none; margin-top: 1px; }
 .sms-alert {
     display: block; background: #e7f0fb; border: 1px solid #b9d4f2; border-radius: 12px;
     padding: 12px 14px; margin-bottom: 14px; font-weight: 700; color: #1a4f8a; text-decoration: none;

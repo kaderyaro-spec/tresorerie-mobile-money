@@ -615,13 +615,21 @@ def dashboard():
 # ---------------------------------------------------------------------------
 # 4.3 — Saisie d'une transaction
 # ---------------------------------------------------------------------------
+_SESSION = object()  # sentinelle : « prendre la valeur dans la session »
+
+
 def _save_operation(tx_type, wallet_id, amount, commission=0, client_uid=None,
-                    created_at=None):
+                    created_at=None, agent_id=None, employee_id=_SESSION):
     """
-    Valide et enregistre une opération pour le compte connecté.
+    Valide et enregistre une opération.
+    Par défaut pour le compte connecté ; `agent_id`/`employee_id` permettent de
+    créer une opération hors session (ex. lecture automatique des SMS).
     Idempotent : si `client_uid` existe déjà, l'opération n'est pas dupliquée.
     Retourne (tx_id, None) en cas de succès, (None, message) sinon.
     """
+    aid = agent_id if agent_id is not None else session["agent_id"]
+    emp = session.get("employee_id") if employee_id is _SESSION else employee_id
+
     if tx_type not in logic.TX_TYPES:
         return None, "Type d'opération invalide."
     if amount <= 0:
@@ -631,7 +639,7 @@ def _save_operation(tx_type, wallet_id, amount, commission=0, client_uid=None,
         return None, "Sélectionnez l'opérateur concerné."
 
     conn = db.get_db()
-    agent = conn.execute("SELECT * FROM agent WHERE id=?", (session["agent_id"],)).fetchone()
+    agent = conn.execute("SELECT * FROM agent WHERE id=?", (aid,)).fetchone()
 
     # Idempotence (synchronisation hors-ligne : le même envoi peut arriver 2 fois)
     if client_uid:
@@ -656,8 +664,7 @@ def _save_operation(tx_type, wallet_id, amount, commission=0, client_uid=None,
         " client_uid, employee_id) "
         "VALUES (?,?,?,?,?,?,?,?,?)",
         (agent["id"], agent["business_day"], created_at or db.now_str(), tx_type,
-         wallet_id if needs_wallet else None, amount, commission, client_uid,
-         session.get("employee_id")),
+         wallet_id if needs_wallet else None, amount, commission, client_uid, emp),
     )
     tx_id = cur.lastrowid
     conn.commit()
@@ -783,19 +790,39 @@ def api_sms():
         return jsonify({"ok": False, "error": "sms_vide"}), 400
 
     conn = db.get_db()
-    ops = [r["operator"] for r in conn.execute(
-        "SELECT operator FROM wallet WHERE agent_id=? AND active=1",
-        (agent["id"],)).fetchall()]
+    wallets = conn.execute(
+        "SELECT id, operator FROM wallet WHERE agent_id=? AND active=1",
+        (agent["id"],)).fetchall()
+    ops = [w["operator"] for w in wallets]
     parsed = logic.parse_sms(body, sender, ops)
+
+    # Création automatique si activée ET lecture complète et fiable :
+    # opérateur reconnu (parmi les portefeuilles), sens, montant ET référence
+    # unique présents. La référence garantit l'absence de doublon (certains
+    # opérateurs envoient 2 SMS pour la même opération).
+    wallet_id = next((w["id"] for w in wallets if w["operator"] == parsed["operator"]), None)
+    status, tx_id = "pending", None
+    can_auto = (agent["sms_auto"] and parsed["type"] and parsed["amount"]
+                and wallet_id and parsed["ref"])
+    if can_auto:
+        conn.close()
+        tx_id, err = _save_operation(
+            tx_type=parsed["type"], wallet_id=wallet_id, amount=parsed["amount"],
+            client_uid="sms:" + parsed["ref"], agent_id=agent["id"], employee_id=None,
+        )
+        if not err:
+            status = "confirmed"
+        conn = db.get_db()
+
     conn.execute(
-        "INSERT INTO sms_inbox (agent_id, sender, body, received_at, "
-        " parsed_type, parsed_operator, parsed_amount) VALUES (?,?,?,?,?,?,?)",
-        (agent["id"], sender, body[:500], db.now_str(),
-         parsed["type"], parsed["operator"], parsed["amount"]),
+        "INSERT INTO sms_inbox (agent_id, sender, body, received_at, status, "
+        " parsed_type, parsed_operator, parsed_amount, tx_id) VALUES (?,?,?,?,?,?,?,?,?)",
+        (agent["id"], sender, body[:500], db.now_str(), status,
+         parsed["type"], parsed["operator"], parsed["amount"], tx_id),
     )
     conn.commit()
     conn.close()
-    return jsonify({"ok": True, "parsed": parsed})
+    return jsonify({"ok": True, "auto": status == "confirmed", "parsed": parsed})
 
 
 @app.route("/sms")
@@ -1503,6 +1530,11 @@ def parametres():
             conn.execute("UPDATE agent SET sms_token=? WHERE id=?",
                          (secrets.token_urlsafe(24), agent["id"]))
             flash("Lien de lecture des SMS (re)généré.", "success")
+
+        elif action == "sms_auto":
+            val = 1 if request.form.get("sms_auto") == "on" else 0
+            conn.execute("UPDATE agent SET sms_auto=? WHERE id=?", (val, agent["id"]))
+            flash("Création automatique " + ("activée." if val else "désactivée."), "success")
 
         conn.commit()
         conn.close()

@@ -124,6 +124,7 @@ CREATE TABLE IF NOT EXISTS agent (
     pin_hash            TEXT,                   -- code de connexion (haché)
     recovery_hash       TEXT,                   -- code de récupération du PIN (haché)
     sms_token           TEXT,                   -- jeton de l'API de lecture des SMS
+    sms_auto            INTEGER NOT NULL DEFAULT 1,  -- créer les transactions auto depuis SMS
     phone_verified      INTEGER NOT NULL DEFAULT 0,
     created_at          TEXT NOT NULL
 );
@@ -226,6 +227,8 @@ def _migrate(conn):
             conn.execute(f"ALTER TABLE agent ADD COLUMN {col} TEXT")
     if "phone_verified" not in acols:
         conn.execute("ALTER TABLE agent ADD COLUMN phone_verified INTEGER NOT NULL DEFAULT 0")
+    if "sms_auto" not in acols:
+        conn.execute("ALTER TABLE agent ADD COLUMN sms_auto INTEGER NOT NULL DEFAULT 1")
     tcols = conn.column_names("transaction")
     if "client_uid" not in tcols:
         conn.execute('ALTER TABLE "transaction" ADD COLUMN client_uid TEXT')

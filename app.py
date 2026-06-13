@@ -141,10 +141,9 @@ def compute_state():
         bal = logic.wallet_balance(w["opening_balance"], w_txs)
         wallet_balances.append(bal)
 
-        # Commission : automatique si l'opérateur a une grille connue (Wave…),
+        # Commission : automatique si l'opérateur a une grille connue (Wave, MTN…),
         # sinon cumul des commissions saisies manuellement.
-        vol = logic.wave_volume(w_txs)
-        commission = logic.daily_commission(w["operator"], vol)
+        commission = logic.operator_commission(w["operator"], w_txs)
         if commission is None:
             commission = logic.commissions_total(w_txs)
 
@@ -1332,10 +1331,10 @@ def rapport():
 
     # Agrégats par jour et par opérateur
     jours, operateurs = {}, {}
+    day_op_txs = {}   # transactions clients par (jour, opérateur à grille)
     for t in txs:
         d = t["business_day"]
-        jours.setdefault(d, {"n": 0, "vol": 0.0, "comm_manuelle": 0.0,
-                             "vol_grille": {}})
+        jours.setdefault(d, {"n": 0, "vol": 0.0, "comm": 0.0})
         j = jours[d]
         j["n"] += 1
         if t["type"] in ("depot_client", "retrait_client"):
@@ -1344,22 +1343,19 @@ def rapport():
             o = operateurs.setdefault(op, {"vol": 0.0, "comm": 0.0, "n": 0})
             o["vol"] += t["amount"]
             o["n"] += 1
-            if op in logic.COMMISSION_GRIDS:
-                j["vol_grille"][op] = j["vol_grille"].get(op, 0.0) + t["amount"]
+            if op in logic.COMMISSION_MODELS:
+                day_op_txs.setdefault((d, op), []).append(t)
             else:
-                j["comm_manuelle"] += t["commission"] or 0
+                j["comm"] += t["commission"] or 0
                 o["comm"] += t["commission"] or 0
 
-    # Commission des opérateurs à grille : par JOUR (grille journalière), puis cumul
-    total_comm = 0.0
-    for d, j in jours.items():
-        c_jour = j["comm_manuelle"]
-        for op, vol in j["vol_grille"].items():
-            c_grille = logic.daily_commission(op, vol) or 0
-            c_jour += c_grille
-            operateurs[op]["comm"] += c_grille
-        j["comm"] = c_jour
-        total_comm += c_jour
+    # Commission des opérateurs à grille : selon leur modèle (daily / per_tx), par jour
+    for (d, op), op_txs in day_op_txs.items():
+        c = logic.operator_commission(op, op_txs) or 0
+        jours[d]["comm"] += c
+        operateurs[op]["comm"] += c
+
+    total_comm = sum(j["comm"] for j in jours.values())
 
     total_vol = sum(j["vol"] for j in jours.values())
     total_ops = sum(j["n"] for j in jours.values())

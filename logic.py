@@ -170,6 +170,52 @@ WAVE_COMMISSION_GRID = [
 ]
 
 
+# Grille MTN / MoMo (Level 2). MODÈLE DIFFÉRENT de Wave : la commission est
+# calculée PAR TRANSACTION selon le MONTANT de l'opération (pas le cumul du jour).
+# (palier_bas, palier_haut, commission_par_opération)
+MTN_COMMISSION_GRID = [
+    (1,           5,            0),
+    (6,           500,          0.8),
+    (501,         10_000,       20),
+    (10_001,      20_000,       56),
+    (20_001,      50_000,       112),
+    (50_001,      75_000,       200),
+    (75_001,      100_000,      272),
+    (100_001,     200_000,      640),
+    (200_001,     300_000,      1_120),
+    (300_001,     400_000,      1_760),
+    (400_001,     500_000,      1_920),
+    (500_001,     600_000,      2_000),
+    (600_001,     800_000,      2_600),
+    (800_001,     1_000_000,    2_720),
+    (1_000_001,   1_500_000,    3_600),
+    (1_500_001,   2_000_000,    4_400),
+    (2_000_001,   2_500_000,    5_280),
+    (2_500_001,   3_000_000,    5_600),
+    (3_000_001,   4_000_000,    6_560),
+    (4_000_001,   4_500_000,    7_200),
+    (4_500_001,   5_000_000,    8_000),
+    (5_000_001,   5_500_000,    9_200),
+    (5_500_001,   6_000_000,    9_600),
+    (6_000_001,   7_000_000,    10_400),
+    (7_000_001,   8_000_000,    11_840),
+    (8_000_001,   10_000_000,   13_200),
+    (10_000_001,  12_500_000,   24_800),
+    (12_500_001,  15_000_000,   25_200),
+    (15_000_001,  17_500_000,   27_360),
+    (17_500_001,  20_000_000,   27_600),
+    (20_000_001,  22_500_000,   33_600),
+    (22_500_001,  25_000_000,   34_400),
+    (25_000_001,  27_500_000,   52_000),
+    (27_500_001,  30_000_000,   56_000),
+    (30_000_001,  32_500_000,   64_000),
+    (32_500_001,  37_500_000,   72_000),
+    (37_500_001,  42_500_000,   76_000),
+    (42_500_001,  50_000_000,   80_000),
+    (50_000_001,  None,         88_000),  # 50 000 001F et plus (illimité)
+]
+
+
 def wave_daily_commission(volume: float) -> float:
     """
     Commission journalière Wave selon le cumul (dépôts + retraits clients) du
@@ -197,13 +243,45 @@ def wave_volume(transactions) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Grilles de commissions par opérateur.
-# Wave est automatisé ; les autres opérateurs s'ajoutent ici dès que leur
-# grille officielle est fournie (même format : palier bas, palier haut, F/jour).
+# Grilles de commissions par opérateur, avec leur MODÈLE de calcul :
+#   "daily"  : commission journalière selon le CUMUL dépôts+retraits du jour (Wave)
+#   "per_tx" : commission PAR TRANSACTION selon le montant de l'opération (MTN)
 # ---------------------------------------------------------------------------
-COMMISSION_GRIDS = {
-    "Wave": WAVE_COMMISSION_GRID,
+COMMISSION_MODELS = {
+    "Wave": ("daily", WAVE_COMMISSION_GRID),
+    "MTN":  ("per_tx", MTN_COMMISSION_GRID),
 }
+# Conservé pour compatibilité (présence d'une grille connue)
+COMMISSION_GRIDS = {op: grid for op, (mode, grid) in COMMISSION_MODELS.items()}
+
+
+def _tier_commission(grid, amount):
+    """Commission du palier correspondant au montant donné."""
+    if amount <= 0:
+        return 0
+    for low, high, comm in grid:
+        if high is None or amount <= high:
+            return comm
+    return 0
+
+
+def operator_commission(operator, transactions):
+    """
+    Commission du jour pour un opérateur à grille connue, selon son modèle.
+    `transactions` : opérations du jour de CE portefeuille.
+    Renvoie None si l'opérateur n'a pas de grille (→ saisie manuelle).
+    """
+    model = COMMISSION_MODELS.get(operator)
+    if model is None:
+        return None
+    mode, grid = model
+    clients = [t for t in transactions
+               if t["type"] in ("depot_client", "retrait_client")]
+    if mode == "daily":
+        volume = sum(t["amount"] for t in clients)
+        return _tier_commission(grid, volume)
+    # per_tx : on additionne la commission de chaque opération
+    return sum(_tier_commission(grid, t["amount"]) for t in clients)
 
 
 # ---------------------------------------------------------------------------

@@ -41,8 +41,8 @@
 
     <section class="block">
         <h2 id="amount-step">3. Montant</h2>
-        <input type="number" name="amount" id="amount" inputmode="numeric"
-               class="big-input" placeholder="0" min="1" required>
+        <input type="text" name="amount" id="amount" inputmode="numeric"
+               class="big-input" placeholder="0" required>
         <div class="quick-amounts">
             {% for m in [500, 1000, 2000, 5000, 10000, 25000] %}
             <button type="button" class="chip" data-amount="{{ m }}">{{ m | fcfa }}</button>
@@ -90,10 +90,18 @@
         });
     });
 
-    // Montants rapides : un tap remplit le champ
+    // Formatage du montant avec séparateur d'espace (5 000)
+    var amountInput = document.getElementById('amount');
+    function frNombre(n){ return n.toLocaleString('fr-FR'); }
+    amountInput.addEventListener('input', function () {
+        var d = this.value.replace(/\D/g, '');
+        this.value = d ? frNombre(parseInt(d, 10)) : '';
+    });
+
+    // Montants rapides : un tap remplit le champ (formaté)
     document.querySelectorAll('.chip[data-amount]').forEach(function (chip) {
         chip.addEventListener('click', function () {
-            document.getElementById('amount').value = this.dataset.amount;
+            amountInput.value = frNombre(parseInt(this.dataset.amount, 10));
             document.querySelectorAll('.chip').forEach(function (c) { c.classList.remove('selected'); });
             this.classList.add('selected');
         });

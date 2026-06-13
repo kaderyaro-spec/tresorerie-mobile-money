@@ -44,7 +44,7 @@ app.jinja_env.filters["fcfa"] = fmt
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "15"
+ASSET_VERSION = "16"
 
 
 @app.context_processor
@@ -916,6 +916,17 @@ def cloture():
     if request.method == "POST":
         conn = db.get_db()
         agent = conn.execute("SELECT * FROM agent WHERE id=?", (session["agent_id"],)).fetchone()
+
+        # Une seule clôture par date : si la journée est déjà clôturée, on n'en
+        # crée pas une 2e (évite les doublons constatés auparavant).
+        deja = conn.execute(
+            "SELECT id FROM cloture WHERE agent_id=? AND date=?",
+            (agent["id"], state["business_day"])).fetchone()
+        if deja:
+            conn.close()
+            flash("Cette journée est déjà clôturée. Une seule clôture par date.", "error")
+            return redirect(url_for("cloture_recap", cloture_id=deja["id"]))
+
         cur = conn.execute(
             "INSERT INTO cloture (agent_id, date, created_at) VALUES (?,?,?)",
             (agent["id"], state["business_day"], db.now_str()),
@@ -950,13 +961,12 @@ def cloture():
             (reel_cash, agent["id"]),
         )
 
-        # Avance de la journée comptable : repartir à zéro de transactions
-        new_day = db.today_str()
-        # si on clôture deux fois le même jour, on incrémente artificiellement
-        if new_day == agent["business_day"]:
-            from datetime import datetime, timedelta
-            new_day = (datetime.strptime(agent["business_day"], "%Y-%m-%d")
-                       + timedelta(days=1)).strftime("%Y-%m-%d")
+        # Avance de la journée comptable : TOUJOURS +1 jour par rapport à la
+        # journée clôturée (avance déterministe, jamais de retour en arrière →
+        # plus de dates de clôture en double).
+        from datetime import datetime, timedelta
+        new_day = (datetime.strptime(state["business_day"], "%Y-%m-%d")
+                   + timedelta(days=1)).strftime("%Y-%m-%d")
         conn.execute("UPDATE agent SET business_day=? WHERE id=?", (new_day, agent["id"]))
 
         conn.commit()
@@ -1035,9 +1045,11 @@ def journal():
         "       COALESCE(SUM(l.commission), 0) AS total_commission "
         "FROM cloture c LEFT JOIN cloture_line l ON l.cloture_id = c.id "
         "WHERE c.agent_id=? "
+        # Une seule entrée par date (la plus récente) : masque les anciens doublons
+        "  AND c.id IN (SELECT MAX(id) FROM cloture WHERE agent_id=? GROUP BY date) "
         "GROUP BY c.id, c.date, c.created_at "
         "ORDER BY c.date DESC, c.id DESC",
-        (session["agent_id"],),
+        (session["agent_id"], session["agent_id"]),
     ).fetchall()
     conn.close()
     return render_template("journal.html", clotures=clotures)

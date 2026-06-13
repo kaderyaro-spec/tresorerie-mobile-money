@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Vérification du numéro{% endblock %}
+{% block header %}Vérification{% endblock %}
+{% block nav %}{% endblock %}
+
+{% block content %}
+<div class="auth-screen">
+    <div class="auth-logo">📨</div>
+    <h1 class="auth-title">Vérifiez votre numéro</h1>
+    <p class="auth-sub">Un code à 6 chiffres a été envoyé au<br><strong>+225 {{ phone }}</strong>.</p>
+
+    {% if demo_code %}
+    <div class="otp-demo">
+        🧪 <strong>Mode démonstration</strong> — votre code est :
+        <span class="otp-demo-code">{{ demo_code }}</span><br>
+        <small>(En production, ce code arrivera par SMS et ne sera pas affiché ici.)</small>
+    </div>
+    {% endif %}
+
+    <form method="post" class="auth-form">
+        <label>Code de vérification</label>
+        <input type="text" name="code" inputmode="numeric" pattern="[0-9]*" maxlength="6"
+               class="pin-input" placeholder="••••••" autocomplete="one-time-code" required autofocus>
+        <button type="submit" class="btn btn-primary btn-block btn-lg">Vérifier</button>
+    </form>
+
+    <form method="post" class="resend-form">
+        <input type="hidden" name="action" value="resend">
+        <button type="submit" class="link-muted resend-btn">Je n'ai rien reçu — renvoyer le code</button>
+    </form>
+</div>
+{% endblock %}

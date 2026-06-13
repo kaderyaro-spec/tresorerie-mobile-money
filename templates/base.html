@@ -11,6 +11,9 @@
 <body>
     <header class="topbar">
         <span class="topbar-title">{% block header %}Trésorerie{% endblock %}</span>
+        {% if session.get('employee_id') %}
+        <span class="emp-badge">👤 {{ session.get('employee_name') }}</span>
+        {% endif %}
         {% block topbar_right %}{% endblock %}
     </header>
 
@@ -42,9 +45,15 @@
         <a href="{{ url_for('cloture') }}" class="nav-item {% if request.endpoint == 'cloture' %}active{% endif %}">
             <span class="nav-ico">🔒</span><span>Clôture</span>
         </a>
+        {% if session.get('employee_id') %}
+        <form method="post" action="{{ url_for('logout') }}" class="nav-item nav-logout">
+            <button type="submit"><span class="nav-ico">🚪</span><span>Quitter</span></button>
+        </form>
+        {% else %}
         <a href="{{ url_for('parametres') }}" class="nav-item {% if request.endpoint == 'parametres' %}active{% endif %}">
             <span class="nav-ico">⚙️</span><span>Réglages</span>
         </a>
+        {% endif %}
     </nav>
     {% endblock %}
 

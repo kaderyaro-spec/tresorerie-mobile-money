@@ -83,6 +83,38 @@
     </form>
 </section>
 
+<section class="block card-form">
+    <h2>👥 Employés</h2>
+    <p class="hint">Chaque employé se connecte avec <strong>votre numéro</strong> et son
+       <strong>propre code PIN</strong>. Ses saisies sont tracées (« ✍ Nom » dans l'historique).
+       Les employés n'ont pas accès aux Réglages, exports ni rapports.</p>
+
+    {% for e in employees %}
+    <div class="param-line">
+        <span>{{ '👤' if e.active else '🚫' }} {{ e.name }}{% if not e.active %} <em>(désactivé)</em>{% endif %}</span>
+        <form method="post">
+            <input type="hidden" name="action" value="toggle_employee">
+            <input type="hidden" name="emp_id" value="{{ e.id }}">
+            <button type="submit" class="btn-del">{{ 'Désactiver' if e.active else 'Réactiver' }}</button>
+        </form>
+    </div>
+    {% endfor %}
+
+    <form method="post" class="add-op">
+        <input type="hidden" name="action" value="add_employee">
+        <h3>Ajouter un employé</h3>
+        <div class="field-inline">
+            <label>Nom de l'employé</label>
+            <input type="text" name="emp_name" placeholder="Ex : Awa (comptoir 2)" required>
+        </div>
+        <div class="field-inline">
+            <label>Son code PIN (4 chiffres min.)</label>
+            <input type="password" name="emp_pin" inputmode="numeric" pattern="[0-9]*" minlength="4" required>
+        </div>
+        <button type="submit" class="btn btn-secondary btn-block">Ajouter l'employé</button>
+    </form>
+</section>
+
 <form method="post" class="block card-form">
     <input type="hidden" name="action" value="set_pin">
     <h2>🔒 Code de connexion</h2>
@@ -111,7 +143,55 @@
     </form>
 </section>
 
+<section class="block card-form">
+    <h2>📩 Lecture automatique des SMS</h2>
+    <p class="hint">Faites remonter automatiquement les SMS de vos opérateurs : les
+       opérations détectées s'affichent à confirmer d'un tap (écran « SMS détectés »).</p>
+
+    {% if agent.sms_token %}
+    <label>Votre lien personnel (à coller dans l'app de transfert)</label>
+    <div class="sms-url" id="sms-url">{{ request.host_url }}api/sms?token={{ agent.sms_token }}</div>
+    <button type="button" class="btn btn-secondary btn-block" id="copy-sms-url">📋 Copier le lien</button>
+
+    <details class="sms-guide">
+        <summary>Comment l'installer (3 minutes)</summary>
+        <ol>
+            <li>Installez une app gratuite de transfert SMS depuis le Play Store
+                (ex. « SMS Forwarder », « SMS to URL Forwarder »).</li>
+            <li>Créez une règle : <strong>méthode POST</strong>, <strong>URL = le lien ci-dessus</strong>.</li>
+            <li>Corps du message : champ <code>body</code> = contenu du SMS (placeholder
+                <code>%text%</code> ou <code>{{ '{{message}}' }}</code> selon l'app),
+                champ <code>sender</code> = expéditeur.</li>
+            <li>Filtrez sur les expéditeurs de vos opérateurs (Orange, Wave, MTN, Moov)
+                pour ne transférer que ces SMS.</li>
+        </ol>
+        <p class="hint">⚠️ Ce lien est secret : ne le partagez pas. En cas de doute, regénérez-le.</p>
+    </details>
+    {% else %}
+    <p class="hint">Générez d'abord votre lien personnel sécurisé.</p>
+    {% endif %}
+
+    <form method="post" style="margin-top:10px">
+        <input type="hidden" name="action" value="sms_token">
+        <button type="submit" class="btn btn-outline btn-block">
+            {% if agent.sms_token %}Regénérer le lien{% else %}Générer mon lien SMS{% endif %}
+        </button>
+    </form>
+</section>
+
 <form method="post" action="{{ url_for('logout') }}" class="block">
     <button type="submit" class="btn btn-outline btn-block">Se déconnecter</button>
 </form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var copyBtn = document.getElementById('copy-sms-url');
+if (copyBtn) {
+    copyBtn.addEventListener('click', function () {
+        var url = document.getElementById('sms-url').textContent.trim();
+        if (navigator.clipboard) { navigator.clipboard.writeText(url); this.textContent = '✓ Copié !'; }
+    });
+}
+</script>
 {% endblock %}

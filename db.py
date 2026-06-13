@@ -123,6 +123,8 @@ CREATE TABLE IF NOT EXISTS agent (
     business_day        TEXT NOT NULL,          -- journée comptable ouverte
     pin_hash            TEXT,                   -- code de connexion (haché)
     recovery_hash       TEXT,                   -- code de récupération du PIN (haché)
+    sms_token           TEXT,                   -- jeton de l'API de lecture des SMS
+    phone_verified      INTEGER NOT NULL DEFAULT 0,
     created_at          TEXT NOT NULL
 );
 
@@ -151,7 +153,8 @@ CREATE TABLE IF NOT EXISTS "transaction" (
     amount       REAL NOT NULL,
     commission   REAL NOT NULL DEFAULT 0,
     deleted      INTEGER NOT NULL DEFAULT 0,
-    client_uid   TEXT                              -- id généré côté téléphone (sync hors-ligne)
+    client_uid   TEXT,                             -- id généré côté téléphone (sync hors-ligne)
+    employee_id  INTEGER                           -- employé qui a saisi (NULL = gérant)
 );
 
 CREATE TABLE IF NOT EXISTS cloture (
@@ -159,6 +162,28 @@ CREATE TABLE IF NOT EXISTS cloture (
     agent_id   INTEGER NOT NULL REFERENCES agent(id),
     date       TEXT NOT NULL,
     created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS employee (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id   INTEGER NOT NULL REFERENCES agent(id),
+    name       TEXT NOT NULL,
+    pin_hash   TEXT NOT NULL,
+    active     INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sms_inbox (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id     INTEGER NOT NULL REFERENCES agent(id),
+    sender       TEXT,
+    body         TEXT NOT NULL,
+    received_at  TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'pending',  -- pending / confirmed / rejected
+    parsed_type  TEXT,
+    parsed_operator TEXT,
+    parsed_amount REAL,
+    tx_id        INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS dette (
@@ -196,12 +221,16 @@ def _migrate(conn):
         conn.execute("ALTER TABLE agent ADD COLUMN pin_hash TEXT")
     if "shop_name" not in acols:
         conn.execute("ALTER TABLE agent ADD COLUMN shop_name TEXT")
-    for col in ("nom", "prenom", "cni", "recovery_hash"):
+    for col in ("nom", "prenom", "cni", "recovery_hash", "sms_token"):
         if col not in acols:
             conn.execute(f"ALTER TABLE agent ADD COLUMN {col} TEXT")
+    if "phone_verified" not in acols:
+        conn.execute("ALTER TABLE agent ADD COLUMN phone_verified INTEGER NOT NULL DEFAULT 0")
     tcols = conn.column_names("transaction")
     if "client_uid" not in tcols:
         conn.execute('ALTER TABLE "transaction" ADD COLUMN client_uid TEXT')
+    if "employee_id" not in tcols:
+        conn.execute('ALTER TABLE "transaction" ADD COLUMN employee_id INTEGER')
     # L'index se crée APRÈS l'ajout de la colonne (bases existantes incluses).
     conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_tx_client_uid '
                  'ON "transaction"(client_uid)')
@@ -243,6 +272,15 @@ def get_agent_by_id(agent_id):
 def get_agent_by_phone(phone):
     conn = get_db()
     row = conn.execute("SELECT * FROM agent WHERE phone=?", (phone,)).fetchone()
+    conn.close()
+    return row
+
+
+def get_agent_by_sms_token(token):
+    if not token:
+        return None
+    conn = get_db()
+    row = conn.execute("SELECT * FROM agent WHERE sms_token=?", (token,)).fetchone()
     conn.close()
     return row
 

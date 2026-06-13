@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% from "_macros.html" import op_logo %}
+{% block title %}SMS à confirmer{% endblock %}
+{% block header %}📩 SMS détectés{% endblock %}
+
+{% block content %}
+<p class="intro">Les SMS de vos opérateurs sont analysés automatiquement.
+   Vérifiez et confirmez chaque opération en un geste — rien n'est enregistré sans vous.</p>
+
+{% if pending %}
+<ul class="tx-list">
+    {% for s in pending %}
+    <li class="tx-item sms-item">
+        <div class="sms-body">💬 {{ s.body }}</div>
+        <form method="post" action="{{ url_for('sms_confirm', sms_id=s.id) }}" class="sms-form">
+            <div class="sms-fields">
+                <select name="type" required>
+                    <option value="depot_client" {% if s.parsed_type == 'depot_client' %}selected{% endif %}>Dépôt client</option>
+                    <option value="retrait_client" {% if s.parsed_type == 'retrait_client' %}selected{% endif %}>Retrait client</option>
+                    <option value="depense" {% if s.parsed_type == 'depense' %}selected{% endif %}>Dépense</option>
+                </select>
+                <select name="wallet_id">
+                    <option value="">— Opérateur —</option>
+                    {% for w in wallets %}
+                    <option value="{{ w.id }}" {% if s.parsed_operator == w.operator %}selected{% endif %}>{{ w.operator }}</option>
+                    {% endfor %}
+                </select>
+                <input type="number" name="amount" inputmode="numeric" placeholder="Montant"
+                       value="{{ s.parsed_amount | round(0,'floor') | int if s.parsed_amount else '' }}" required>
+            </div>
+            <div class="sms-actions">
+                <button type="submit" class="btn btn-primary">✓ Confirmer</button>
+            </div>
+        </form>
+        <form method="post" action="{{ url_for('sms_reject', sms_id=s.id) }}" class="sms-reject">
+            <button type="submit" class="btn-del">Ignorer ce SMS</button>
+        </form>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p class="empty">Aucun SMS en attente. 👍<br>
+   <small>Configurez la lecture automatique dans Réglages → Lecture des SMS.</small></p>
+{% endif %}
+{% endblock %}

@@ -113,8 +113,12 @@ def compute_state():
         "SELECT COALESCE(SUM(amount), 0) AS total FROM dette "
         "WHERE agent_id=? AND settled_at IS NULL", (agent["id"],)
     ).fetchone()
+    sms_row = conn.execute(
+        "SELECT COUNT(*) AS n FROM sms_inbox WHERE agent_id=? AND status='pending'",
+        (agent["id"],)).fetchone()
     conn.close()
     dettes_total = dettes_row["total"] if dettes_row else 0
+    sms_pending = sms_row["n"] if sms_row else 0
 
     txs_d = [dict(t) for t in txs]
 
@@ -159,6 +163,7 @@ def compute_state():
         "commissions": commissions,
         "nb_alertes": nb_alertes,
         "dettes": dettes_total,
+        "sms_pending": sms_pending,
     }
 
 
@@ -169,8 +174,8 @@ def require_onboarding():
 
 # Points d'entrée accessibles sans être connecté
 PUBLIC_ENDPOINTS = {
-    "login", "signup", "static", "index", "ping",
-    "onboarding_pin", "onboarding_operators", "onboarding_services",
+    "login", "signup", "static", "index", "ping", "api_sms",
+    "onboarding_otp", "onboarding_pin", "onboarding_operators", "onboarding_services",
     "recovery_request", "recovery_newpin",
 }
 
@@ -196,9 +201,71 @@ def _new_recovery_code():
     return f"{raw[:4]}-{raw[4:]}"
 
 
+# ---------------------------------------------------------------------------
+# Envoi de SMS / OTP.
+# Par défaut : mode démonstration (le code s'affiche à l'écran, aucun SMS réel).
+# En production : définir OTP_PROVIDER=africastalking + AT_USERNAME + AT_API_KEY
+# (+ AT_SENDER_ID) dans les variables d'environnement → envoi de vrais SMS.
+# ---------------------------------------------------------------------------
+OTP_PROVIDER = os.environ.get("OTP_PROVIDER")
+AT_USERNAME = os.environ.get("AT_USERNAME")
+AT_API_KEY = os.environ.get("AT_API_KEY")
+AT_SENDER = os.environ.get("AT_SENDER_ID", "")
+
+
+def otp_demo_mode():
+    """True si aucun fournisseur SMS n'est configuré (le code s'affiche à l'écran)."""
+    return not (OTP_PROVIDER == "africastalking" and AT_USERNAME and AT_API_KEY)
+
+
+def send_sms(phone, message):
+    """Envoie un SMS via le fournisseur configuré. Retourne True si parti."""
+    if otp_demo_mode():
+        return False
+    import urllib.request
+    import urllib.parse
+    try:
+        to = phone if str(phone).startswith("+") else "+225" + str(phone)
+        data = urllib.parse.urlencode({
+            "username": AT_USERNAME, "to": to, "message": message, "from": AT_SENDER,
+        }).encode()
+        req = urllib.request.Request(
+            "https://api.africastalking.com/version1/messaging", data=data,
+            headers={"apiKey": AT_API_KEY, "Accept": "application/json",
+                     "Content-Type": "application/x-www-form-urlencoded"})
+        urllib.request.urlopen(req, timeout=10)
+        return True
+    except Exception:
+        return False
+
+
+def _new_otp():
+    import secrets
+    return f"{secrets.randbelow(900000) + 100000}"   # 6 chiffres
+
+
+def _start_otp(phone):
+    """Génère un OTP, le mémorise (haché) en session, et tente l'envoi par SMS."""
+    from datetime import datetime, timedelta
+    code = _new_otp()
+    session["otp"] = {
+        "hash": generate_password_hash(code),
+        "phone": phone,
+        "exp": (datetime.now() + timedelta(minutes=10)).strftime("%Y-%m-%d %H:%M:%S"),
+        "tries": 0,
+    }
+    send_sms(phone, f"Trésorerie Mobile Money : votre code de vérification est {code}. "
+                    "Il expire dans 10 minutes.")
+    session["otp_demo"] = code if otp_demo_mode() else None
+
+
 def current_agent():
     """L'agent du compte connecté (selon la session), ou None."""
     return db.get_agent_by_id(session.get("agent_id"))
+
+
+# Écrans réservés au gérant (un employé connecté n'y accède pas)
+GERANT_ONLY = {"parametres", "rapport", "export_csv", "export_pdf"}
 
 
 @app.before_request
@@ -215,6 +282,9 @@ def require_login():
         if request.path.startswith("/api/"):
             return jsonify({"ok": False, "error": "non_connecte"}), 401
         return redirect(url_for("login"))
+    if request.endpoint in GERANT_ONLY and session.get("employee_id"):
+        flash("Cette section est réservée au gérant.", "error")
+        return redirect(url_for("dashboard"))
     return None
 
 
@@ -240,12 +310,29 @@ def login():
         phone = normalize_phone(request.form.get("phone", ""))
         pin = request.form.get("pin", "").strip()
         agent = db.get_agent_by_phone(phone)
-        if agent and agent["pin_hash"] and check_password_hash(agent["pin_hash"], pin):
-            session.clear()
-            session.permanent = True
-            session["agent_id"] = agent["id"]
-            session["auth"] = True
-            return redirect(url_for("dashboard"))
+        if agent and pin:
+            # 1) PIN du gérant ?
+            if agent["pin_hash"] and check_password_hash(agent["pin_hash"], pin):
+                session.clear()
+                session.permanent = True
+                session["agent_id"] = agent["id"]
+                session["auth"] = True
+                return redirect(url_for("dashboard"))
+            # 2) PIN d'un employé du point ?
+            conn = db.get_db()
+            emps = conn.execute(
+                "SELECT * FROM employee WHERE agent_id=? AND active=1",
+                (agent["id"],)).fetchall()
+            conn.close()
+            for emp in emps:
+                if check_password_hash(emp["pin_hash"], pin):
+                    session.clear()
+                    session.permanent = True
+                    session["agent_id"] = agent["id"]
+                    session["auth"] = True
+                    session["employee_id"] = emp["id"]
+                    session["employee_name"] = emp["name"]
+                    return redirect(url_for("dashboard"))
         flash("Numéro ou code incorrect.", "error")
         return redirect(url_for("login"))
 
@@ -337,12 +424,54 @@ def signup():
             flash("Ce numéro est déjà utilisé. Connectez-vous.", "error")
             return redirect(url_for("login"))
 
-        # On démarre une nouvelle inscription propre.
+        # On démarre une nouvelle inscription propre, puis on vérifie le numéro.
         session.clear()
         session["reg"] = {"nom": nom, "prenom": prenom, "cni": cni, "phone": phone}
-        return redirect(url_for("onboarding_pin"))
+        _start_otp(phone)
+        return redirect(url_for("onboarding_otp"))
 
     return render_template("signup.html")
+
+
+# ---------------------------------------------------------------------------
+# Inscription — vérification du numéro par code OTP
+# ---------------------------------------------------------------------------
+@app.route("/inscription/verification", methods=["GET", "POST"])
+def onboarding_otp():
+    reg = session.get("reg")
+    otp = session.get("otp")
+    if not reg or not otp:
+        return redirect(url_for("signup"))
+
+    if request.method == "POST":
+        from datetime import datetime
+        if request.form.get("action") == "resend":
+            _start_otp(reg["phone"])
+            flash("Un nouveau code a été envoyé.", "success")
+            return redirect(url_for("onboarding_otp"))
+
+        code = request.form.get("code", "").strip()
+        expired = datetime.now() > datetime.strptime(otp["exp"], "%Y-%m-%d %H:%M:%S")
+        if otp["tries"] >= 5:
+            flash("Trop de tentatives. Demandez un nouveau code.", "error")
+            return redirect(url_for("onboarding_otp"))
+        if expired:
+            flash("Code expiré. Demandez un nouveau code.", "error")
+            return redirect(url_for("onboarding_otp"))
+        if check_password_hash(otp["hash"], code):
+            reg["otp_ok"] = True
+            session["reg"] = reg
+            session.pop("otp", None)
+            session.pop("otp_demo", None)
+            return redirect(url_for("onboarding_pin"))
+        otp["tries"] += 1
+        session["otp"] = otp
+        flash("Code incorrect.", "error")
+        return redirect(url_for("onboarding_otp"))
+
+    return render_template("onboarding_otp.html",
+                           phone=reg["phone"],
+                           demo_code=session.get("otp_demo"))
 
 
 # ---------------------------------------------------------------------------
@@ -350,8 +479,11 @@ def signup():
 # ---------------------------------------------------------------------------
 @app.route("/inscription/pin", methods=["GET", "POST"])
 def onboarding_pin():
-    if not session.get("reg"):
+    reg = session.get("reg")
+    if not reg:
         return redirect(url_for("signup"))
+    if not reg.get("otp_ok"):
+        return redirect(url_for("onboarding_otp"))
 
     if request.method == "POST":
         pin = request.form.get("pin", "").strip()
@@ -414,10 +546,10 @@ def onboarding_services():
 
         conn = db.get_db()
         cur = conn.execute(
-            "INSERT INTO agent (phone, nom, prenom, cni, business_day, pin_hash, created_at) "
-            "VALUES (?,?,?,?,?,?,?)",
+            "INSERT INTO agent (phone, nom, prenom, cni, business_day, pin_hash, "
+            " phone_verified, created_at) VALUES (?,?,?,?,?,?,?,?)",
             (reg["phone"], reg["nom"], reg["prenom"], reg["cni"],
-             db.today_str(), reg["pin_hash"], db.now_str()),
+             db.today_str(), reg["pin_hash"], 1 if reg.get("otp_ok") else 0, db.now_str()),
         )
         agent_id = cur.lastrowid
 
@@ -520,10 +652,12 @@ def _save_operation(tx_type, wallet_id, amount, commission=0, client_uid=None,
 
     cur = conn.execute(
         'INSERT INTO "transaction" '
-        "(agent_id, business_day, created_at, type, wallet_id, amount, commission, client_uid) "
-        "VALUES (?,?,?,?,?,?,?,?)",
+        "(agent_id, business_day, created_at, type, wallet_id, amount, commission, "
+        " client_uid, employee_id) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
         (agent["id"], agent["business_day"], created_at or db.now_str(), tx_type,
-         wallet_id if needs_wallet else None, amount, commission, client_uid),
+         wallet_id if needs_wallet else None, amount, commission, client_uid,
+         session.get("employee_id")),
     )
     tx_id = cur.lastrowid
     conn.commit()
@@ -625,6 +759,96 @@ def api_sync():
         else:
             accepted.append(uid)
     return jsonify({"ok": True, "accepted": accepted, "rejected": rejected})
+
+
+# ---------------------------------------------------------------------------
+# Lecture automatique des SMS (via une app de transfert SMS sur le téléphone)
+# ---------------------------------------------------------------------------
+@app.route("/api/sms", methods=["POST"])
+def api_sms():
+    """
+    Reçoit un SMS transféré depuis le téléphone (app type « SMS Forwarder »).
+    Authentifié par le jeton personnel de l'agent (?token=...). Le SMS est
+    analysé puis mis en attente de confirmation par l'agent (jamais validé seul).
+    """
+    token = request.args.get("token") or request.headers.get("X-Token")
+    agent = db.get_agent_by_sms_token(token)
+    if not agent:
+        return jsonify({"ok": False, "error": "token_invalide"}), 401
+
+    data = request.get_json(silent=True) or request.form
+    body = (data.get("body") or data.get("text") or data.get("message") or "").strip()
+    sender = (data.get("sender") or data.get("from") or "")[:64]
+    if not body:
+        return jsonify({"ok": False, "error": "sms_vide"}), 400
+
+    conn = db.get_db()
+    ops = [r["operator"] for r in conn.execute(
+        "SELECT operator FROM wallet WHERE agent_id=? AND active=1",
+        (agent["id"],)).fetchall()]
+    parsed = logic.parse_sms(body, sender, ops)
+    conn.execute(
+        "INSERT INTO sms_inbox (agent_id, sender, body, received_at, "
+        " parsed_type, parsed_operator, parsed_amount) VALUES (?,?,?,?,?,?,?)",
+        (agent["id"], sender, body[:500], db.now_str(),
+         parsed["type"], parsed["operator"], parsed["amount"]),
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "parsed": parsed})
+
+
+@app.route("/sms")
+def sms_inbox():
+    conn = db.get_db()
+    aid = session["agent_id"]
+    pending = conn.execute(
+        "SELECT * FROM sms_inbox WHERE agent_id=? AND status='pending' "
+        "ORDER BY received_at DESC", (aid,)).fetchall()
+    wallets = conn.execute(
+        "SELECT * FROM wallet WHERE agent_id=? AND active=1 ORDER BY id", (aid,)).fetchall()
+    conn.close()
+    return render_template("sms.html", pending=pending, wallets=wallets,
+                           tx_types=logic.TX_TYPES)
+
+
+@app.route("/sms/<int:sms_id>/confirm", methods=["POST"])
+def sms_confirm(sms_id):
+    conn = db.get_db()
+    aid = session["agent_id"]
+    sms = conn.execute("SELECT * FROM sms_inbox WHERE id=? AND agent_id=?",
+                       (sms_id, aid)).fetchone()
+    conn.close()
+    if not sms or sms["status"] != "pending":
+        flash("SMS introuvable ou déjà traité.", "error")
+        return redirect(url_for("sms_inbox"))
+
+    tx_id, err = _save_operation(
+        tx_type=request.form.get("type"),
+        wallet_id=request.form.get("wallet_id") or None,
+        amount=_to_float(request.form.get("amount", "0")),
+    )
+    if err:
+        flash(err, "error")
+        return redirect(url_for("sms_inbox"))
+
+    conn = db.get_db()
+    conn.execute("UPDATE sms_inbox SET status='confirmed', tx_id=? WHERE id=? AND agent_id=?",
+                 (tx_id, sms_id, aid))
+    conn.commit()
+    conn.close()
+    flash("Transaction créée depuis le SMS. ✓", "success")
+    return redirect(url_for("sms_inbox"))
+
+
+@app.route("/sms/<int:sms_id>/reject", methods=["POST"])
+def sms_reject(sms_id):
+    conn = db.get_db()
+    conn.execute("UPDATE sms_inbox SET status='rejected' WHERE id=? AND agent_id=?",
+                 (sms_id, session["agent_id"]))
+    conn.commit()
+    conn.close()
+    return redirect(url_for("sms_inbox"))
 
 
 # ---------------------------------------------------------------------------
@@ -835,8 +1059,10 @@ def dette_delete(dette_id):
 # ---------------------------------------------------------------------------
 def _filtered_transactions(conn, agent_id, f_jour, f_wallet, f_type):
     """Transactions du compte, filtrées comme sur l'écran Historique."""
-    query = ('SELECT t.*, w.operator AS operator FROM "transaction" t '
+    query = ('SELECT t.*, w.operator AS operator, e.name AS employee_name '
+             'FROM "transaction" t '
              "LEFT JOIN wallet w ON t.wallet_id = w.id "
+             "LEFT JOIN employee e ON t.employee_id = e.id "
              "WHERE t.agent_id=? AND t.deleted=0")
     params = [agent_id]
     if f_jour:
@@ -1237,6 +1463,47 @@ def parametres():
             session["show_recovery"] = code
             flash("Nouveau code de secours généré. Notez-le : il ne sera plus affiché.", "success")
 
+        elif action == "add_employee":
+            name = request.form.get("emp_name", "").strip()
+            pin = request.form.get("emp_pin", "").strip()
+            if not name:
+                flash("Le nom de l'employé est obligatoire.", "error")
+            elif not pin or len(pin) < 4 or not pin.isdigit():
+                flash("Le code PIN de l'employé doit comporter au moins 4 chiffres.", "error")
+            else:
+                # Le PIN doit être unique sur ce compte (il identifie qui se connecte)
+                clash = agent["pin_hash"] and check_password_hash(agent["pin_hash"], pin)
+                if not clash:
+                    others = conn.execute(
+                        "SELECT pin_hash FROM employee WHERE agent_id=? AND active=1",
+                        (agent["id"],)).fetchall()
+                    clash = any(check_password_hash(o["pin_hash"], pin) for o in others)
+                if clash:
+                    flash("Ce code PIN est déjà utilisé sur ce compte. Choisissez-en un autre.", "error")
+                else:
+                    conn.execute(
+                        "INSERT INTO employee (agent_id, name, pin_hash, created_at) "
+                        "VALUES (?,?,?,?)",
+                        (agent["id"], name, generate_password_hash(pin), db.now_str()))
+                    flash(f"Employé « {name} » ajouté. Il se connecte avec votre numéro "
+                          "et SON code PIN.", "success")
+
+        elif action == "toggle_employee":
+            emp_id = request.form.get("emp_id")
+            emp = conn.execute("SELECT * FROM employee WHERE id=? AND agent_id=?",
+                               (emp_id, agent["id"])).fetchone()
+            if emp:
+                conn.execute("UPDATE employee SET active=? WHERE id=?",
+                             (0 if emp["active"] else 1, emp["id"]))
+                flash(("Accès désactivé pour " if emp["active"] else "Accès réactivé pour ")
+                      + emp["name"] + ".", "success")
+
+        elif action == "sms_token":
+            import secrets
+            conn.execute("UPDATE agent SET sms_token=? WHERE id=?",
+                         (secrets.token_urlsafe(24), agent["id"]))
+            flash("Lien de lecture des SMS (re)généré.", "success")
+
         conn.commit()
         conn.close()
         return redirect(url_for("parametres"))
@@ -1246,9 +1513,13 @@ def parametres():
     ).fetchall()
     active_ops = {w["operator"] for w in wallets}
     dispo = [op for op in logic.OPERATEURS if op not in active_ops]
+    employees = conn.execute(
+        "SELECT * FROM employee WHERE agent_id=? ORDER BY active DESC, name",
+        (agent["id"],)).fetchall()
     conn.close()
 
     return render_template("parametres.html", agent=agent, wallets=wallets, dispo=dispo,
+                           employees=employees,
                            recovery_code=session.pop("show_recovery", None))
 
 

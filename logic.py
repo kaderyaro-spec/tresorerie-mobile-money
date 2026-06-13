@@ -206,6 +206,44 @@ COMMISSION_GRIDS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Analyse d'un SMS d'opérateur (lecture auto via app de transfert SMS).
+# Heuristique : on extrait le montant, l'opérateur et le sens (dépôt/retrait).
+# Tout reste MODIFIABLE par l'agent avant confirmation ; le but est de
+# pré-remplir pour gagner du temps, pas de deviner parfaitement.
+# ---------------------------------------------------------------------------
+def parse_sms(body, sender="", known_operators=None):
+    import re
+    text = (body or "").lower()
+    hay = (str(sender) + " " + text).lower()
+
+    # Montant : 1er nombre (séparateurs espace/point) suivi de FCFA/CFA/F/francs
+    amount = None
+    m = re.search(r'(\d[\d .]{1,})\s*(?:fcfa|f\.?\s*cfa|cfa|francs?|\bf\b)', text)
+    if m:
+        digits = re.sub(r'[ .]', '', m.group(1))
+        if digits.isdigit():
+            amount = float(digits)
+
+    # Opérateur : on cherche le mot-clé parmi ceux gérés par l'agent
+    operator = None
+    for op in (known_operators or []):
+        key = op.split()[0].lower()           # orange / moov / wave / mtn / crédit…
+        if key and key in hay:
+            operator = op
+            break
+
+    # Sens de l'opération
+    typ = None
+    if any(k in text for k in ("retrait", "retire", "retiré", "withdraw")):
+        typ = "retrait_client"
+    elif any(k in text for k in ("depot", "dépôt", "depose", "déposé",
+                                 "recu", "reçu", "recevez", "deposit")):
+        typ = "depot_client"
+
+    return {"operator": operator, "type": typ, "amount": amount}
+
+
 def daily_commission(operator: str, volume: float):
     """
     Commission journalière de l'opérateur selon sa grille (cumul du jour).

@@ -46,6 +46,7 @@
             <span>{{ t.operator or 'Caisse' }}</span>
             <span>{{ t.created_at }}</span>
             {% if t.commission and t.commission > 0 %}<span>Comm. {{ t.commission | fcfa }}</span>{% endif %}
+            {% if t.employee_name %}<span>✍ {{ t.employee_name }}</span>{% endif %}
         </div>
     </li>
     {% endfor %}

@@ -35,6 +35,10 @@
 <div class="alert-bar">⚠️ {{ s.nb_alertes }} portefeuille(s) sous le seuil d'alerte</div>
 {% endif %}
 
+{% if s.sms_pending > 0 %}
+<a href="{{ url_for('sms_inbox') }}" class="sms-alert">📩 {{ s.sms_pending }} SMS à confirmer →</a>
+{% endif %}
+
 <div class="cards">
     <div class="card card-cash">
         <span class="card-op">💵 Caisse (espèces)</span>

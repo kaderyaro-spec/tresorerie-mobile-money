@@ -796,19 +796,28 @@ def api_sms():
     ops = [w["operator"] for w in wallets]
     parsed = logic.parse_sms(body, sender, ops)
 
+    # Clé anti-doublon : l'ID Transaction de l'opérateur si présent (Orange, MTN).
+    # Pour les opérateurs SANS ID dans la notification (Wave), on se rabat sur une
+    # empreinte du texte : une notification identique reçue 2 fois ne crée jamais
+    # 2 transactions. (Wave n'envoie qu'UNE notification par opération.)
+    REFLESS_OPERATORS = {"Wave"}
+    ref = parsed["ref"]
+    if not ref and parsed["operator"] in REFLESS_OPERATORS:
+        import hashlib
+        norm = " ".join(body.lower().split())
+        ref = "h:" + hashlib.sha1(norm.encode("utf-8")).hexdigest()[:16]
+
     # Création automatique si activée ET lecture complète et fiable :
-    # opérateur reconnu (parmi les portefeuilles), sens, montant ET référence
-    # unique présents. La référence garantit l'absence de doublon (certains
-    # opérateurs envoient 2 SMS pour la même opération).
+    # opérateur reconnu (parmi les portefeuilles), sens, montant ET clé anti-doublon.
     wallet_id = next((w["id"] for w in wallets if w["operator"] == parsed["operator"]), None)
     status, tx_id = "pending", None
     can_auto = (agent["sms_auto"] and parsed["type"] and parsed["amount"]
-                and wallet_id and parsed["ref"])
+                and wallet_id and ref)
     if can_auto:
         conn.close()
         tx_id, err = _save_operation(
             tx_type=parsed["type"], wallet_id=wallet_id, amount=parsed["amount"],
-            client_uid="sms:" + parsed["ref"], agent_id=agent["id"], employee_id=None,
+            client_uid="sms:" + ref, agent_id=agent["id"], employee_id=None,
         )
         if not err:
             status = "confirmed"

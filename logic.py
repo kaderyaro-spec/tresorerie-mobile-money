@@ -242,11 +242,15 @@ def parse_sms(body, sender="", known_operators=None):
     text = (body or "").lower()
     hay = (str(sender) + " " + text).lower()
 
-    AMT = r"(\d[\d .,]*\d|\d)\s*(?:fcfa|f\.?\s*cfa|cfa|francs?|f)\b"
+    # Un montant = soit des groupes de milliers (« 465.425 », « 1 796 610 »),
+    # soit des chiffres simples avec décimale éventuelle (« 300000.00 », « 30000 »).
+    # Ce format strict évite de fusionner un numéro de téléphone avec le montant.
+    NUM = r"(?:\d{1,3}(?:[ .]\d{3})+|\d+)(?:[.,]\d{1,2})?"
+    AMT = r"(" + NUM + r")\s*(?:fcfa|f\.?\s*cfa|cfa|francs?|f)\b"
 
     # 1) Montant prioritaire : celui qui suit le mot « Montant » (= la transaction)
     amount = None
-    m = re.search(r"montant\s*:?\s*(\d[\d .,]*\d|\d)", text)
+    m = re.search(r"montant\s*:?\s*(" + NUM + r")", text)
     if m:
         amount = _sms_amount(m.group(1))
 

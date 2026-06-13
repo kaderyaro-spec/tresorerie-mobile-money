@@ -212,33 +212,71 @@ COMMISSION_GRIDS = {
 # Tout reste MODIFIABLE par l'agent avant confirmation ; le but est de
 # pré-remplir pour gagner du temps, pas de deviner parfaitement.
 # ---------------------------------------------------------------------------
+# Mots-clés (sur l'expéditeur surtout) pour reconnaître l'opérateur
+_OP_KEYWORDS = {
+    "Orange Money": ["orange"],
+    "Moov Money": ["moov", "flooz"],
+    "Wave": ["wave"],
+    "MTN": ["mtn", "momo"],
+    "Crédit": ["credit", "crédit"],
+    "Factures": ["facture"],
+}
+
+
+def _sms_amount(token):
+    """Convertit « 300000.00 », « 30 000 », « 10300.00 » → entier en F."""
+    import re
+    s = str(token).replace(" ", "")
+    s = re.sub(r"[.,]\d{1,2}$", "", s)        # retire la décimale finale (.00 / ,00)
+    s = s.replace(".", "").replace(",", "")   # retire les séparateurs de milliers
+    return float(s) if s.isdigit() and s else None
+
+
 def parse_sms(body, sender="", known_operators=None):
+    """
+    Analyse un SMS d'opérateur (calé sur de vrais SMS Orange/MTN Côte d'Ivoire).
+    Renvoie {operator, type, amount} — chaque champ pouvant être None.
+    Reste indicatif : l'agent confirme/corrige toujours avant enregistrement.
+    """
     import re
     text = (body or "").lower()
     hay = (str(sender) + " " + text).lower()
 
-    # Montant : 1er nombre (séparateurs espace/point) suivi de FCFA/CFA/F/francs
-    amount = None
-    m = re.search(r'(\d[\d .]{1,})\s*(?:fcfa|f\.?\s*cfa|cfa|francs?|\bf\b)', text)
-    if m:
-        digits = re.sub(r'[ .]', '', m.group(1))
-        if digits.isdigit():
-            amount = float(digits)
+    AMT = r"(\d[\d .,]*\d|\d)\s*(?:fcfa|f\.?\s*cfa|cfa|francs?|f)\b"
 
-    # Opérateur : on cherche le mot-clé parmi ceux gérés par l'agent
+    # 1) Montant prioritaire : celui qui suit le mot « Montant » (= la transaction)
+    amount = None
+    m = re.search(r"montant\s*:?\s*(\d[\d .,]*\d|\d)", text)
+    if m:
+        amount = _sms_amount(m.group(1))
+
+    # 2) Sinon : 1er montant suivi de FCFA/F qui n'est PAS un solde/frais/commission
+    if amount is None:
+        for mm in re.finditer(AMT, text):
+            before = text[max(0, mm.start() - 22):mm.start()]
+            if any(k in before for k in ("solde", "frais", "commission")):
+                continue
+            amount = _sms_amount(mm.group(1))
+            if amount:
+                break
+
+    # Opérateur : d'abord via l'expéditeur, puis le corps
     operator = None
     for op in (known_operators or []):
-        key = op.split()[0].lower()           # orange / moov / wave / mtn / crédit…
-        if key and key in hay:
-            operator = op
+        for kw in _OP_KEYWORDS.get(op, [op.split()[0].lower()]):
+            if kw and kw in hay:
+                operator = op
+                break
+        if operator:
             break
 
-    # Sens de l'opération
+    # Sens de l'opération (pour un AGENT : « envoyé/dépôt » = dépôt client ;
+    # « retrait » = retrait client)
     typ = None
-    if any(k in text for k in ("retrait", "retire", "retiré", "withdraw")):
+    if any(k in text for k in ("retrait", "retire", "retiré")):
         typ = "retrait_client"
     elif any(k in text for k in ("depot", "dépôt", "depose", "déposé",
-                                 "recu", "reçu", "recevez", "deposit")):
+                                 "envoye", "envoyé", "envoi")):
         typ = "depot_client"
 
     return {"operator": operator, "type": typ, "amount": amount}

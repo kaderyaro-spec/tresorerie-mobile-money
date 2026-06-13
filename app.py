@@ -44,7 +44,7 @@ app.jinja_env.filters["fcfa"] = fmt
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "17"
+ASSET_VERSION = "18"
 
 
 @app.context_processor
@@ -805,7 +805,18 @@ def api_sms():
     analysé puis mis en attente de confirmation par l'agent (jamais validé seul).
     """
     token = request.args.get("token") or request.headers.get("X-Token")
-    agent = db.get_agent_by_sms_token(token)
+    # Lien PAR APPAREIL d'abord (multi-téléphones), sinon lien unique (compat).
+    device = None
+    agent = None
+    if token:
+        conn0 = db.get_db()
+        device = conn0.execute(
+            "SELECT * FROM sms_device WHERE token=? AND active=1", (token,)).fetchone()
+        conn0.close()
+        if device:
+            agent = db.get_agent_by_id(device["agent_id"])
+        else:
+            agent = db.get_agent_by_sms_token(token)
     if not agent:
         return jsonify({"ok": False, "error": "token_invalide"}), 401
 
@@ -855,6 +866,10 @@ def api_sms():
         (agent["id"], sender, body[:500], db.now_str(), status,
          parsed["type"], parsed["operator"], parsed["amount"], tx_id),
     )
+    # Trace de l'appareil source (multi-téléphones)
+    if device:
+        conn.execute("UPDATE sms_device SET last_seen=?, nb_recus=nb_recus+1 WHERE id=?",
+                     (db.now_str(), device["id"]))
     conn.commit()
     conn.close()
     return jsonify({"ok": True, "auto": status == "confirmed", "parsed": parsed})
@@ -1624,6 +1639,24 @@ def parametres():
             conn.execute("UPDATE agent SET sms_auto=? WHERE id=?", (val, agent["id"]))
             flash("Création automatique " + ("activée." if val else "désactivée."), "success")
 
+        elif action == "add_device":
+            import secrets
+            name = request.form.get("device_name", "").strip()
+            if not name:
+                flash("Donnez un nom à l'appareil (ex. « Téléphone Wave »).", "error")
+            else:
+                conn.execute(
+                    "INSERT INTO sms_device (agent_id, name, token, created_at) "
+                    "VALUES (?,?,?,?)",
+                    (agent["id"], name, secrets.token_urlsafe(24), db.now_str()))
+                flash(f"Appareil « {name} » ajouté. Copiez son lien pour le configurer.", "success")
+
+        elif action == "revoke_device":
+            dev_id = request.form.get("device_id")
+            conn.execute("DELETE FROM sms_device WHERE id=? AND agent_id=?",
+                         (dev_id, agent["id"]))
+            flash("Appareil révoqué. Son lien ne fonctionne plus.", "success")
+
         conn.commit()
         conn.close()
         return redirect(url_for("parametres"))
@@ -1636,10 +1669,13 @@ def parametres():
     employees = conn.execute(
         "SELECT * FROM employee WHERE agent_id=? ORDER BY active DESC, name",
         (agent["id"],)).fetchall()
+    devices = conn.execute(
+        "SELECT * FROM sms_device WHERE agent_id=? ORDER BY created_at", (agent["id"],)
+    ).fetchall()
     conn.close()
 
     return render_template("parametres.html", agent=agent, wallets=wallets, dispo=dispo,
-                           employees=employees,
+                           employees=employees, devices=devices,
                            recovery_code=session.pop("show_recovery", None))
 
 

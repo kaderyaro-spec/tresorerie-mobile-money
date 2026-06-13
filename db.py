@@ -187,6 +187,17 @@ CREATE TABLE IF NOT EXISTS sms_inbox (
     tx_id        INTEGER
 );
 
+CREATE TABLE IF NOT EXISTS sms_device (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id    INTEGER NOT NULL REFERENCES agent(id),
+    name        TEXT NOT NULL,
+    token       TEXT NOT NULL,
+    active      INTEGER NOT NULL DEFAULT 1,
+    last_seen   TEXT,
+    nb_recus    INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS dette (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     agent_id    INTEGER NOT NULL REFERENCES agent(id),

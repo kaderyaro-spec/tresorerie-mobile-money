@@ -153,46 +153,59 @@
            (l'identifiant évite tout doublon). Sinon, elle attend votre confirmation.</p>
     </form>
 
-    {% if agent.sms_token %}
-    <label>Votre lien personnel (à coller dans l'app de transfert)</label>
-    <div class="sms-url" id="sms-url">{{ request.host_url }}api/sms?token={{ agent.sms_token }}</div>
-    <button type="button" class="btn btn-secondary btn-block" id="copy-sms-url">📋 Copier le lien</button>
+    <h3>📲 Vos appareils</h3>
+    <p class="hint">Un lien par téléphone (ex. « Téléphone Wave », « Téléphone Orange »).
+       Tous alimentent <strong>le même compte</strong>. Vous pouvez révoquer un appareil
+       perdu sans toucher aux autres.</p>
 
+    {% for d in devices %}
+    <div class="device-item">
+        <div class="device-head">
+            <span class="device-name">📱 {{ d.name }}</span>
+            <form method="post" onsubmit="return confirm('Révoquer « {{ d.name }} » ? Son lien cessera de fonctionner.');">
+                <input type="hidden" name="action" value="revoke_device">
+                <input type="hidden" name="device_id" value="{{ d.id }}">
+                <button type="submit" class="btn-del">Révoquer</button>
+            </form>
+        </div>
+        <div class="sms-url device-url" data-url="{{ request.host_url }}api/sms?token={{ d.token }}">{{ request.host_url }}api/sms?token={{ d.token }}</div>
+        <div class="device-meta">
+            <button type="button" class="btn btn-secondary copy-url">📋 Copier le lien</button>
+            <span class="device-stat">{% if d.last_seen %}✅ {{ d.nb_recus }} reçu(s) · {{ d.last_seen }}{% else %}⏳ en attente de la 1ʳᵉ réception{% endif %}</span>
+        </div>
+    </div>
+    {% endfor %}
+
+    <form method="post" class="add-op">
+        <input type="hidden" name="action" value="add_device">
+        <h3>Ajouter un appareil</h3>
+        <input type="text" name="device_name" placeholder="Ex : Téléphone Wave" required>
+        <button type="submit" class="btn btn-primary btn-block">Créer le lien de l'appareil</button>
+    </form>
+
+    {% if devices %}
     <details class="sms-guide">
         <summary>📨 Opérateurs par SMS (Orange, MTN, Moov)</summary>
         <ol>
-            <li>Installez une app gratuite de transfert SMS (ex. « SMS to URL Forwarder »).</li>
-            <li>Règle : <strong>POST</strong> vers <strong>le lien ci-dessus</strong>.</li>
+            <li>Sur le téléphone concerné, installez une app gratuite de transfert SMS
+                (ex. « SMS to URL Forwarder »).</li>
+            <li>Règle : <strong>POST</strong> vers <strong>le lien de CET appareil</strong>.</li>
             <li>Corps : champ <code>body</code> = contenu du SMS (<code>%text%</code> ou
                 <code>{{ '{{message}}' }}</code> selon l'app), <code>sender</code> = expéditeur.</li>
-            <li>Filtrez sur les expéditeurs (Orange, MTN, Moov) pour ne transférer qu'eux.</li>
+            <li>Filtrez sur l'expéditeur de l'opérateur du téléphone.</li>
         </ol>
     </details>
 
     <details class="sms-guide">
         <summary>🌊 Wave (par notification de l'app marchand)</summary>
-        <p class="hint">Wave n'envoie pas de SMS : les transactions arrivent en
-           <strong>notification</strong> dans l'app marchand. On les capte autrement :</p>
-        <ol>
-            <li>Installez une app gratuite de <strong>transfert de notifications</strong>
-                (ex. « Notification Forwarder », ou MacroDroid / Tasker).</li>
-            <li>Réglez-la pour capter les notifications de l'<strong>app Wave Business</strong>.</li>
-            <li>Même règle : <strong>POST</strong> vers le lien ci-dessus, le <strong>texte de
-                la notification</strong> dans le champ <code>body</code>, <code>sender=Wave</code>.</li>
-        </ol>
+        <p class="hint">Wave n'envoie pas de SMS : sur le téléphone Wave, installez une app de
+           <strong>transfert de notifications</strong> (ex. « Notification Forwarder »),
+           réglée sur l'<strong>app Wave Business</strong>, qui POST vers le lien de cet
+           appareil (<code>body</code> = texte de la notification, <code>sender=Wave</code>).</p>
     </details>
 
-    <p class="hint">⚠️ Ce lien est secret : ne le partagez pas. En cas de doute, regénérez-le.</p>
-    {% else %}
-    <p class="hint">Générez d'abord votre lien personnel sécurisé.</p>
+    <p class="hint">⚠️ Chaque lien est secret. En cas de perte d'un téléphone, révoquez son appareil.</p>
     {% endif %}
-
-    <form method="post" style="margin-top:10px">
-        <input type="hidden" name="action" value="sms_token">
-        <button type="submit" class="btn btn-primary btn-block">
-            {% if agent.sms_token %}Regénérer le lien{% else %}Générer mon lien SMS{% endif %}
-        </button>
-    </form>
 </section>
 
 <!-- ============ DOCUMENTS ============ -->
@@ -226,12 +239,13 @@
 
 {% block scripts %}
 <script>
-var copyBtn = document.getElementById('copy-sms-url');
-if (copyBtn) {
-    copyBtn.addEventListener('click', function () {
-        var url = document.getElementById('sms-url').textContent.trim();
-        if (navigator.clipboard) { navigator.clipboard.writeText(url); this.textContent = '✓ Copié !'; }
+document.querySelectorAll('.copy-url').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        var box = this.closest('.device-item').querySelector('.device-url');
+        var url = (box.dataset.url || box.textContent).trim();
+        if (navigator.clipboard) { navigator.clipboard.writeText(url); }
+        this.textContent = '✓ Copié !';
     });
-}
+});
 </script>
 {% endblock %}

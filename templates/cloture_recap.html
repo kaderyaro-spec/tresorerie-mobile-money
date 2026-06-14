@@ -39,7 +39,7 @@
         {% for l in lines %}
             <tr>
                 <td><span class="op-name">{% if l.kind == 'wallet' %}{{ op_logo(l.label, 22) }} {% endif %}{{ l.label }}</span>
-                    {% if l.dette and l.dette > 0 %}<small class="dette-tag">dette déduite {{ l.dette | fcfa }}</small>{% set ns.dette = ns.dette + l.dette %}{% endif %}
+                    {% if l.dette and l.dette > 0 %}<small class="dette-tag">dont dette − {{ l.dette | fcfa }}</small>{% set ns.dette = ns.dette + l.dette %}{% endif %}
                 </td>
                 <td>{{ l.reel | fcfa }}</td>
                 <td class="ecart-cell {% if l.ecart < 0 %}ecart-neg{% elif l.ecart > 0 %}ecart-pos{% endif %}">
@@ -50,13 +50,14 @@
         </tbody>
     </table>
     {% if ns.dette > 0 %}
-    <p class="hint">📓 <strong>{{ ns.dette | fcfa }} FCFA</strong> de dettes clients ont été
-       déduites du théorique (écarts justifiés, déjà imputés).</p>
+    <p class="hint">📓 <strong>{{ ns.dette | fcfa }} FCFA</strong> de dettes clients apparaissent en
+       <strong>écart négatif</strong> (écarts justifiés par le carnet, pas une perte).</p>
     {% endif %}
-    {% if total_ecart != 0 %}
-    <p class="hint">⚠️ Écart global de la journée : <strong>{{ total_ecart | fcfa }} FCFA</strong>.</p>
+    {% set ecart_reel = total_ecart + ns.dette %}
+    {% if ecart_reel != 0 %}
+    <p class="hint">⚠️ Écart réel (hors dettes) : <strong>{{ ecart_reel | fcfa }} FCFA</strong>.</p>
     {% else %}
-    <p class="hint">✅ Aucun écart : tous les soldes correspondent.</p>
+    <p class="hint">✅ Aucun écart réel : hors dettes, tous les soldes correspondent.</p>
     {% endif %}
 </section>
 

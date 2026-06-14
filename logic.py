@@ -47,6 +47,14 @@ TX_TYPES = {
         "float": 0, "cash": -1,
         "wallet": False, "commission": False,
     },
+    # Sortie d'UV définitive lors du règlement d'une dette « opérateur » :
+    # l'UV avait été avancée au client, le remboursement entre en caisse → le
+    # solde de l'opérateur reste diminué (il ne remonte pas). Sans commission.
+    "sortie_uv_dette": {
+        "label": "Sortie UV (dette réglée)",
+        "float": -1, "cash": 0,
+        "wallet": True, "commission": False,
+    },
 }
 
 # Opérations considérées comme « réapprovisionnement » (écran 4.4)

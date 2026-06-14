@@ -57,7 +57,7 @@ app.jinja_env.filters["phone"] = fmt_phone
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "28"
+ASSET_VERSION = "29"
 
 
 @app.context_processor
@@ -996,11 +996,13 @@ def cloture():
         )
         cloture_id = cur.lastrowid
 
-        # Lignes portefeuilles — théorique AJUSTÉ des dettes du poste
+        # Lignes portefeuilles — théorique BRUT ; la dette du poste apparaît
+        # alors comme un écart négatif (− dette), écart justifié par le carnet.
         for w in state["wallets"]:
-            theo = w["balance"] - w["dette"]          # dette déduite du poste
-            reel = _to_float(request.form.get(f"reel_wallet_{w['id']}", theo))
-            ec = logic.ecart(reel, theo)
+            theo = w["balance"]                       # théorique brut (avant dettes)
+            reel_defaut = w["balance"] - w["dette"]   # attendu réel, net des dettes
+            reel = _to_float(request.form.get(f"reel_wallet_{w['id']}", reel_defaut))
+            ec = logic.ecart(reel, theo)              # = − dette si le réel correspond
             conn.execute(
                 "INSERT INTO cloture_line "
                 "(cloture_id, label, kind, ref_id, theorique, reel, ecart, commission, dette) "
@@ -1011,9 +1013,10 @@ def cloture():
             # Report : le solde réel devient l'ouverture du lendemain
             conn.execute("UPDATE wallet SET opening_balance=? WHERE id=?", (reel, w["id"]))
 
-        # Ligne caisse — théorique ajusté des dettes imputées à la caisse
-        theo_cash = state["cash"] - state["cash_dette"]
-        reel_cash = _to_float(request.form.get("reel_cash", theo_cash))
+        # Ligne caisse — théorique brut ; la dette caisse apparaît en écart négatif
+        theo_cash = state["cash"]
+        reel_cash_defaut = state["cash"] - state["cash_dette"]
+        reel_cash = _to_float(request.form.get("reel_cash", reel_cash_defaut))
         ec_cash = logic.ecart(reel_cash, theo_cash)
         conn.execute(
             "INSERT INTO cloture_line "
@@ -1084,9 +1087,12 @@ def cloture_recap(cloture_id):
     if agent["shop_name"]:
         txt.append(f"🏪 {agent['shop_name']}")
     txt.append("")
+    # Les dettes apparaissent en écart négatif ; on isole l'écart réel (hors dettes).
+    dette_lines = sum(l["dette"] or 0 for l in lines)
+    ecart_reel = total_ecart + dette_lines
     txt.append(f"💰 Commissions du jour : {fmt(total_commission)} F")
-    signe = "+" if total_ecart > 0 else ""
-    txt.append(f"📊 Écart global : {signe}{fmt(total_ecart)} F")
+    signe = "+" if ecart_reel > 0 else ""
+    txt.append(f"📊 Écart réel (hors dettes) : {signe}{fmt(ecart_reel)} F")
     txt.append("")
     txt.append("Par portefeuille :")
     for l in lines:
@@ -1220,10 +1226,25 @@ def dette_regler(dette_id):
     conn.execute("UPDATE dette SET settled_at=? WHERE id=?", (db.now_str(), dette_id))
     conn.commit()
     conn.close()
-    # Remboursement encaissé : entrée d'espèces en caisse → augmente la caisse
-    # ET le fond de roulement (mouvement réel enregistré dans l'historique).
-    _save_operation(tx_type="depot_caisse", wallet_id=None, amount=d["amount"])
-    flash(f"Dette réglée : {fmt(d['amount'])} FCFA encaissés en caisse. ✓", "success")
+
+    montant = d["amount"]
+    if d["accounted"]:
+        # Dette déjà imputée à une clôture : la diminution du poste est déjà dans
+        # le solde d'ouverture. Le remboursement est un simple encaissement.
+        _save_operation(tx_type="depot_caisse", wallet_id=None, amount=montant)
+        flash(f"Dette réglée : {fmt(montant)} FCFA encaissés en caisse. ✓", "success")
+    elif d["wallet_id"]:
+        # Dette opérateur (non imputée) : l'UV avancée sort définitivement (le
+        # solde de l'opérateur reste diminué, il ne remonte pas) et le
+        # remboursement entre en caisse → caisse et fond de roulement augmentent.
+        _save_operation(tx_type="sortie_uv_dette", wallet_id=d["wallet_id"], amount=montant)
+        _save_operation(tx_type="depot_caisse", wallet_id=None, amount=montant)
+        flash(f"Dette réglée : {fmt(montant)} FCFA encaissés en caisse "
+              f"(le solde opérateur reste diminué). ✓", "success")
+    else:
+        # Dette caisse (non imputée) : l'argent avancé depuis la caisse y revient
+        # simplement (la déduction affichée disparaît) → aucun mouvement à créer.
+        flash(f"Dette réglée : {fmt(montant)} FCFA de retour en caisse. ✓", "success")
     return redirect(url_for("dettes"))
 
 

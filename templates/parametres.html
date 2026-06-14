@@ -58,7 +58,7 @@
     <h2>🔔 Seuils d'alerte d'UV</h2>
     {% for w in wallets %}
     <div class="field-inline">
-        <label>{{ w.operator }}</label>
+        <label>{{ wallet_name(w.operator, w.label) }}</label>
         <input type="number" name="seuil_{{ w.id }}" inputmode="numeric" value="{{ w.alert_threshold | round(0,'floor') | int }}">
     </div>
     {% endfor %}
@@ -66,11 +66,11 @@
 </form>
 
 <section class="block card-form">
-    <h2>💳 Opérateurs suivis</h2>
+    <h2>💳 Comptes opérateurs</h2>
     {% for w in wallets %}
     <div class="param-line">
-        <span class="op-name">{{ op_logo(w.operator, 30) }} {{ w.operator }}</span>
-        <form method="post" onsubmit="return confirm('Retirer {{ w.operator }} du suivi ?');">
+        <span class="op-name">{{ op_logo(w.operator, 30) }} {{ wallet_name(w.operator, w.label) }}</span>
+        <form method="post" onsubmit="return confirm('Retirer ce compte du suivi ?');">
             <input type="hidden" name="action" value="remove_operator">
             <input type="hidden" name="wallet_id" value="{{ w.id }}">
             <button type="submit" class="btn-del">Retirer</button>
@@ -78,14 +78,17 @@
     </div>
     {% endfor %}
 
-    {% if dispo %}
     <form method="post" class="add-op">
         <input type="hidden" name="action" value="add_operator">
-        <h3>Ajouter un opérateur</h3>
+        <h3>Ajouter un compte (ou un 2ᵉ sous-compte)</h3>
         <select name="new_operator" required>
-            <option value="">— Choisir —</option>
+            <option value="">— Opérateur —</option>
             {% for op in dispo %}<option value="{{ op }}">{{ op }}</option>{% endfor %}
         </select>
+        <div class="field-inline">
+            <label>Sous-compte (optionnel)</label>
+            <input type="text" name="new_label" placeholder="Ex : SIM 2, Boutique B…">
+        </div>
         <div class="field-inline">
             <label>Solde UV</label>
             <input type="number" name="new_opening" inputmode="numeric" placeholder="0">
@@ -94,7 +97,7 @@
             <label>Seuil alerte</label>
             <input type="number" name="new_seuil" inputmode="numeric" placeholder="0">
         </div>
-        <button type="submit" class="btn btn-primary btn-block">Ajouter l'opérateur</button>
+        <button type="submit" class="btn btn-primary btn-block">Ajouter le compte</button>
     </form>
     {% endif %}
 </section>
@@ -168,6 +171,7 @@
                 <button type="submit" class="btn-del">Révoquer</button>
             </form>
         </div>
+        {% if d.operator %}<div class="device-bind">🎯 rattaché à <strong>{{ wallet_name(d.operator, d.wallet_label) }}</strong></div>{% endif %}
         <div class="sms-url device-url" data-url="{{ request.host_url }}api/sms?token={{ d.token }}">{{ request.host_url }}api/sms?token={{ d.token }}</div>
         <div class="device-meta">
             <button type="button" class="btn btn-secondary copy-url">📋 Copier le lien</button>
@@ -180,6 +184,17 @@
         <input type="hidden" name="action" value="add_device">
         <h3>Ajouter un appareil</h3>
         <input type="text" name="device_name" placeholder="Ex : Téléphone Wave" required>
+        <div class="field-inline">
+            <label>Sous-compte alimenté (optionnel)</label>
+            <select name="device_wallet_id">
+                <option value="">— Auto (selon l'opérateur du message) —</option>
+                {% for w in wallets %}
+                <option value="{{ w.id }}">{{ wallet_name(w.operator, w.label) }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <p class="hint">Choisissez le sous-compte si ce téléphone correspond à une SIM précise
+           (utile quand vous avez 2 SIM du même opérateur).</p>
         <button type="submit" class="btn btn-primary btn-block">Créer le lien de l'appareil</button>
     </form>
 

@@ -18,7 +18,7 @@
         <tbody>
             {% for w in s.wallets %}
             <tr>
-                <td><span class="op-name">{{ op_logo(w.operator, 24) }} {{ w.operator }}</span>
+                <td><span class="op-name">{{ op_logo(w.operator, 24) }} {{ w.name }}</span>
                     {% if w.dette > 0 %}<small class="dette-tag">− dette {{ w.dette | fcfa }}</small>{% endif %}
                 </td>
                 <td><input type="text" inputmode="numeric" name="reel_wallet_{{ w.id }}"
@@ -60,7 +60,7 @@
             {% set total_comm = namespace(v=0) %}
             {% for w in s.wallets %}
             <tr>
-                <td><span class="op-name">{{ op_logo(w.operator, 24) }} {{ w.operator }}</span></td>
+                <td><span class="op-name">{{ op_logo(w.operator, 24) }} {{ w.name }}</span></td>
                 <td class="comm-val">{{ w.commission | fcfa }} FCFA</td>
             </tr>
             {% set total_comm.v = total_comm.v + w.commission %}

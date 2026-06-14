@@ -133,6 +133,7 @@ CREATE TABLE IF NOT EXISTS wallet (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     agent_id        INTEGER NOT NULL REFERENCES agent(id),
     operator        TEXT NOT NULL,
+    label           TEXT,                   -- sous-compte (ex. « SIM 2 ») ; NULL = unique
     opening_balance REAL NOT NULL DEFAULT 0,
     alert_threshold REAL NOT NULL DEFAULT 0,
     active          INTEGER NOT NULL DEFAULT 1
@@ -192,6 +193,7 @@ CREATE TABLE IF NOT EXISTS sms_device (
     agent_id    INTEGER NOT NULL REFERENCES agent(id),
     name        TEXT NOT NULL,
     token       TEXT NOT NULL,
+    wallet_id   INTEGER,                  -- sous-compte ciblé par cet appareil (NULL = auto)
     active      INTEGER NOT NULL DEFAULT 1,
     last_seen   TEXT,
     nb_recus    INTEGER NOT NULL DEFAULT 0,
@@ -264,6 +266,10 @@ def _migrate(conn):
         conn.execute("ALTER TABLE dette ADD COLUMN accounted INTEGER NOT NULL DEFAULT 0")
     if "cloture_id" not in dcols:
         conn.execute("ALTER TABLE dette ADD COLUMN cloture_id INTEGER")
+    if "label" not in conn.column_names("wallet"):
+        conn.execute("ALTER TABLE wallet ADD COLUMN label TEXT")
+    if "wallet_id" not in conn.column_names("sms_device"):
+        conn.execute("ALTER TABLE sms_device ADD COLUMN wallet_id INTEGER")
 
 
 def init_db():

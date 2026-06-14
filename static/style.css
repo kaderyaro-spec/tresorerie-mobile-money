@@ -311,6 +311,7 @@ input:focus, select:focus { outline: none; border-color: var(--green); }
 .device-item { border: 1.5px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
 .device-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .device-name { font-weight: 800; }
+.device-bind { font-size: 12px; color: var(--green-d); margin-bottom: 6px; }
 .device-url { margin-bottom: 8px; }
 .device-meta { display: flex; flex-direction: column; gap: 6px; }
 .device-meta .btn { padding: 9px; font-size: 13px; }

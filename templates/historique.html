@@ -43,7 +43,7 @@
             </span>
         </div>
         <div class="tx-meta">
-            <span>{{ t.operator or 'Caisse' }}</span>
+            <span>{{ wallet_name(t.operator, t.wallet_label) if t.operator else 'Caisse' }}</span>
             <span>{{ t.created_at }}</span>
             {% if t.commission and t.commission > 0 %}<span>Comm. {{ t.commission | fcfa }}</span>{% endif %}
             {% if t.employee_name %}<span>✍ {{ t.employee_name }}</span>{% endif %}

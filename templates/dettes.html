@@ -32,7 +32,7 @@
             <select name="wallet_id">
                 <option value="">— Choisir —</option>
                 {% for w in wallets %}
-                <option value="{{ w.id }}">{{ w.operator }}</option>
+                <option value="{{ w.id }}">{{ wallet_name(w.operator, w.label) }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -54,7 +54,7 @@
         </div>
         <div class="tx-meta">
             {% if d.op_type %}
-            <span>{{ tx_types[d.op_type].label if d.op_type in tx_types else d.op_type }}{% if d.operator %} · {{ d.operator }}{% elif d.op_type == 'retrait_caisse' %} · Caisse{% endif %}</span>
+            <span>{{ tx_types[d.op_type].label if d.op_type in tx_types else d.op_type }}{% if d.operator %} · {{ wallet_name(d.operator, d.wallet_label) }}{% elif d.op_type == 'retrait_caisse' %} · Caisse{% endif %}</span>
             {% endif %}
             {% if d.accounted %}<span>✔ imputée à la clôture</span>{% endif %}
             {% if d.client_phone %}<span>📞 {{ d.client_phone }}</span>{% endif %}

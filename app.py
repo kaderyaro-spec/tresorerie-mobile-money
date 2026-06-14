@@ -44,7 +44,7 @@ app.jinja_env.filters["fcfa"] = fmt
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "18"
+ASSET_VERSION = "19"
 
 
 @app.context_processor
@@ -98,6 +98,14 @@ def op_style(name):
 
 
 app.jinja_env.globals["op_style"] = op_style
+
+
+def wallet_name(operator, label=None):
+    """Nom d'affichage d'un portefeuille : « Opérateur » ou « Opérateur · sous-compte »."""
+    return f"{operator} · {label}" if label else operator
+
+
+app.jinja_env.globals["wallet_name"] = wallet_name
 
 
 # ---------------------------------------------------------------------------
@@ -159,6 +167,8 @@ def compute_state():
         wallet_states.append({
             "id": w["id"],
             "operator": w["operator"],
+            "label": w["label"],
+            "name": wallet_name(w["operator"], w["label"]),
             "balance": bal,
             "threshold": w["alert_threshold"],
             "voyant": logic.voyant(bal, w["alert_threshold"]),
@@ -833,20 +843,28 @@ def api_sms():
     ops = [w["operator"] for w in wallets]
     parsed = logic.parse_sms(body, sender, ops)
 
+    # Sous-compte cible : si l'appareil est rattaché à un sous-compte précis
+    # (ex. « Téléphone Orange SIM 2 »), l'opération y va directement ; sinon on
+    # déduit le portefeuille par l'opérateur reconnu dans le message.
+    if device and device["wallet_id"]:
+        wallet_id = device["wallet_id"]
+        dev_w = next((w for w in wallets if w["id"] == wallet_id), None)
+        eff_operator = dev_w["operator"] if dev_w else parsed["operator"]
+    else:
+        wallet_id = next((w["id"] for w in wallets if w["operator"] == parsed["operator"]), None)
+        eff_operator = parsed["operator"]
+
     # Clé anti-doublon : l'ID Transaction de l'opérateur si présent (Orange, MTN).
-    # Pour les opérateurs SANS ID dans la notification (Wave), on se rabat sur une
-    # empreinte du texte : une notification identique reçue 2 fois ne crée jamais
-    # 2 transactions. (Wave n'envoie qu'UNE notification par opération.)
+    # Pour les opérateurs SANS ID (Wave), on se rabat sur une empreinte du texte.
     REFLESS_OPERATORS = {"Wave"}
     ref = parsed["ref"]
-    if not ref and parsed["operator"] in REFLESS_OPERATORS:
+    if not ref and eff_operator in REFLESS_OPERATORS:
         import hashlib
         norm = " ".join(body.lower().split())
         ref = "h:" + hashlib.sha1(norm.encode("utf-8")).hexdigest()[:16]
 
     # Création automatique si activée ET lecture complète et fiable :
-    # opérateur reconnu (parmi les portefeuilles), sens, montant ET clé anti-doublon.
-    wallet_id = next((w["id"] for w in wallets if w["operator"] == parsed["operator"]), None)
+    # portefeuille déterminé, sens, montant ET clé anti-doublon.
     status, tx_id = "pending", None
     can_auto = (agent["sms_auto"] and parsed["type"] and parsed["amount"]
                 and wallet_id and ref)
@@ -967,7 +985,7 @@ def cloture():
                 "INSERT INTO cloture_line "
                 "(cloture_id, label, kind, ref_id, theorique, reel, ecart, commission, dette) "
                 "VALUES (?,?,?,?,?,?,?,?,?)",
-                (cloture_id, w["operator"], "wallet", w["id"], theo, reel, ec,
+                (cloture_id, w["name"], "wallet", w["id"], theo, reel, ec,
                  w["commission"], w["dette"]),
             )
             # Report : le solde réel devient l'ouverture du lendemain
@@ -1151,7 +1169,7 @@ def dettes():
     wallets = conn.execute(
         "SELECT * FROM wallet WHERE agent_id=? AND active=1 ORDER BY id", (aid,)).fetchall()
     en_cours = conn.execute(
-        "SELECT d.*, w.operator AS operator FROM dette d "
+        "SELECT d.*, w.operator AS operator, w.label AS wallet_label FROM dette d "
         "LEFT JOIN wallet w ON d.wallet_id = w.id "
         "WHERE d.agent_id=? AND d.settled_at IS NULL ORDER BY d.created_at DESC", (aid,)
     ).fetchall()
@@ -1192,8 +1210,8 @@ def dette_delete(dette_id):
 # ---------------------------------------------------------------------------
 def _filtered_transactions(conn, agent_id, f_jour, f_wallet, f_type):
     """Transactions du compte, filtrées comme sur l'écran Historique."""
-    query = ('SELECT t.*, w.operator AS operator, e.name AS employee_name '
-             'FROM "transaction" t '
+    query = ('SELECT t.*, w.operator AS operator, w.label AS wallet_label, '
+             '       e.name AS employee_name FROM "transaction" t '
              "LEFT JOIN wallet w ON t.wallet_id = w.id "
              "LEFT JOIN employee e ON t.employee_id = e.id "
              "WHERE t.agent_id=? AND t.deleted=0")
@@ -1365,7 +1383,7 @@ def rapport():
     aid = session["agent_id"]
     agent = conn.execute("SELECT * FROM agent WHERE id=?", (aid,)).fetchone()
     txs = conn.execute(
-        'SELECT t.*, w.operator AS operator FROM "transaction" t '
+        'SELECT t.*, w.operator AS operator, w.label AS wallet_label FROM "transaction" t '
         "LEFT JOIN wallet w ON t.wallet_id = w.id "
         "WHERE t.agent_id=? AND t.deleted=0 AND t.business_day LIKE ? "
         "ORDER BY t.business_day, t.created_at",
@@ -1382,9 +1400,10 @@ def rapport():
         "WHERE agent_id=? AND settled_at IS NULL", (aid,)).fetchone()
     conn.close()
 
-    # Agrégats par jour et par opérateur
-    jours, operateurs = {}, {}
-    day_op_txs = {}   # transactions clients par (jour, opérateur à grille)
+    # Agrégats par jour et par COMPTE (sous-compte) — la commission à grille est
+    # calculée par sous-compte (ex. chaque SIM Wave a son cumul journalier propre).
+    jours, comptes = {}, {}
+    day_w_txs = {}   # (jour, wallet_id) -> (operateur, [transactions clients])
     for t in txs:
         d = t["business_day"]
         jours.setdefault(d, {"n": 0, "vol": 0.0, "comm": 0.0})
@@ -1393,20 +1412,22 @@ def rapport():
         if t["type"] in ("depot_client", "retrait_client"):
             j["vol"] += t["amount"]
             op = t["operator"] or "?"
-            o = operateurs.setdefault(op, {"vol": 0.0, "comm": 0.0, "n": 0})
-            o["vol"] += t["amount"]
-            o["n"] += 1
+            wid = t["wallet_id"]
+            nom = wallet_name(op, t["wallet_label"]) if t["operator"] else op
+            cc = comptes.setdefault(wid, {"name": nom, "vol": 0.0, "comm": 0.0, "n": 0})
+            cc["vol"] += t["amount"]
+            cc["n"] += 1
             if op in logic.COMMISSION_MODELS:
-                day_op_txs.setdefault((d, op), []).append(t)
+                day_w_txs.setdefault((d, wid), (op, []))[1].append(t)
             else:
                 j["comm"] += t["commission"] or 0
-                o["comm"] += t["commission"] or 0
+                cc["comm"] += t["commission"] or 0
 
-    # Commission des opérateurs à grille : selon leur modèle (daily / per_tx), par jour
-    for (d, op), op_txs in day_op_txs.items():
-        c = logic.operator_commission(op, op_txs) or 0
+    # Commission à grille (daily / per_tx), par jour ET par sous-compte
+    for (d, wid), (op, w_txs) in day_w_txs.items():
+        c = logic.operator_commission(op, w_txs) or 0
         jours[d]["comm"] += c
-        operateurs[op]["comm"] += c
+        comptes[wid]["comm"] += c
 
     total_comm = sum(j["comm"] for j in jours.values())
 
@@ -1456,20 +1477,20 @@ def rapport():
         pdf.set_font("helvetica", "", 10)
     pdf.ln(3)
 
-    # Par opérateur
-    if operateurs:
+    # Par compte (sous-compte)
+    if comptes:
         pdf.set_font("helvetica", "B", 12)
-        pdf.cell(0, 8, lat("Par opérateur"), new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 8, lat("Par compte"), new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("helvetica", "B", 9)
         pdf.set_fill_color(13, 110, 92)
         pdf.set_text_color(255, 255, 255)
-        for w_, h_ in zip([60, 40, 50, 40], ["Opérateur", "Opérations", "Volume", "Commissions"]):
+        for w_, h_ in zip([60, 40, 50, 40], ["Compte", "Opérations", "Volume", "Commissions"]):
             pdf.cell(w_, 8, lat(h_), border=1, fill=True, align="C")
         pdf.ln()
         pdf.set_font("helvetica", "", 9)
         pdf.set_text_color(30, 30, 30)
-        for op, o in sorted(operateurs.items()):
-            pdf.cell(60, 7, lat(op), border=1)
+        for o in sorted(comptes.values(), key=lambda x: x["name"]):
+            pdf.cell(60, 7, lat(o["name"]), border=1)
             pdf.cell(40, 7, str(o["n"]), border=1, align="R")
             pdf.cell(50, 7, lat(fmt(o["vol"])), border=1, align="R")
             pdf.cell(40, 7, lat(fmt(o["comm"])), border=1, align="R")
@@ -1555,20 +1576,22 @@ def parametres():
 
         elif action == "add_operator":
             op = request.form.get("new_operator")
+            label = request.form.get("new_label", "").strip() or None
             opening = _to_float(request.form.get("new_opening", "0"))
             seuil = _to_float(request.form.get("new_seuil", "0"))
             if op:
+                # Un sous-compte identique (même opérateur ET même libellé) existe déjà ?
                 existing = conn.execute(
-                    "SELECT * FROM wallet WHERE agent_id=? AND operator=?",
-                    (agent["id"], op)
-                ).fetchone()
+                    "SELECT id FROM wallet WHERE agent_id=? AND operator=? "
+                    "AND COALESCE(label,'')=COALESCE(?,'') AND active=1",
+                    (agent["id"], op, label)).fetchone()
                 if existing:
-                    conn.execute("UPDATE wallet SET active=1 WHERE id=?", (existing["id"],))
+                    flash("Ce compte existe déjà. Donnez un libellé différent pour un 2ᵉ.", "error")
                 else:
                     conn.execute(
-                        "INSERT INTO wallet (agent_id, operator, opening_balance, alert_threshold) "
-                        "VALUES (?,?,?,?)", (agent["id"], op, opening, seuil))
-                flash(f"Opérateur « {op} » ajouté.", "success")
+                        "INSERT INTO wallet (agent_id, operator, label, opening_balance, alert_threshold) "
+                        "VALUES (?,?,?,?,?)", (agent["id"], op, label, opening, seuil))
+                    flash(f"Compte « {wallet_name(op, label)} » ajouté.", "success")
 
         elif action == "remove_operator":
             wid = request.form.get("wallet_id")
@@ -1642,13 +1665,20 @@ def parametres():
         elif action == "add_device":
             import secrets
             name = request.form.get("device_name", "").strip()
+            dev_wallet = request.form.get("device_wallet_id") or None
+            # le sous-compte choisi doit appartenir au compte
+            if dev_wallet:
+                chk = conn.execute("SELECT id FROM wallet WHERE id=? AND agent_id=?",
+                                   (dev_wallet, agent["id"])).fetchone()
+                if not chk:
+                    dev_wallet = None
             if not name:
                 flash("Donnez un nom à l'appareil (ex. « Téléphone Wave »).", "error")
             else:
                 conn.execute(
-                    "INSERT INTO sms_device (agent_id, name, token, created_at) "
-                    "VALUES (?,?,?,?)",
-                    (agent["id"], name, secrets.token_urlsafe(24), db.now_str()))
+                    "INSERT INTO sms_device (agent_id, name, token, wallet_id, created_at) "
+                    "VALUES (?,?,?,?,?)",
+                    (agent["id"], name, secrets.token_urlsafe(24), dev_wallet, db.now_str()))
                 flash(f"Appareil « {name} » ajouté. Copiez son lien pour le configurer.", "success")
 
         elif action == "revoke_device":
@@ -1664,13 +1694,16 @@ def parametres():
     wallets = conn.execute(
         "SELECT * FROM wallet WHERE agent_id=? AND active=1 ORDER BY id", (agent["id"],)
     ).fetchall()
-    active_ops = {w["operator"] for w in wallets}
-    dispo = [op for op in logic.OPERATEURS if op not in active_ops]
+    # Tous les opérateurs sont proposables (on peut ajouter un 2ᵉ sous-compte
+    # du même opérateur, ex. deux SIM Orange Money).
+    dispo = list(logic.OPERATEURS)
     employees = conn.execute(
         "SELECT * FROM employee WHERE agent_id=? ORDER BY active DESC, name",
         (agent["id"],)).fetchall()
     devices = conn.execute(
-        "SELECT * FROM sms_device WHERE agent_id=? ORDER BY created_at", (agent["id"],)
+        "SELECT sd.*, w.operator AS operator, w.label AS wallet_label "
+        "FROM sms_device sd LEFT JOIN wallet w ON sd.wallet_id = w.id "
+        "WHERE sd.agent_id=? ORDER BY sd.created_at", (agent["id"],)
     ).fetchall()
     conn.close()
 

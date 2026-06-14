@@ -51,7 +51,7 @@
         <span class="voyant voyant-{{ w.voyant }}"></span>
         <div class="card-head">
             {{ op_logo(w.operator) }}
-            <span class="card-op">{{ w.operator }}</span>
+            <span class="card-op">{{ w.name }}</span>
         </div>
         <span class="card-bal"><span class="masquable" data-clear="{{ w.balance | fcfa }} ">{{ w.balance | fcfa }} </span><small>FCFA</small></span>
         {% if w.threshold > 0 %}

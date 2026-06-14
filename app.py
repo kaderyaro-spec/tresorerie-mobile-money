@@ -57,7 +57,7 @@ app.jinja_env.filters["phone"] = fmt_phone
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "30"
+ASSET_VERSION = "31"
 
 
 @app.context_processor
@@ -193,17 +193,14 @@ def compute_state():
     cash_open = caisse["opening_balance"] if caisse else 0
     cash_bal = logic.cash_balance(cash_open, txs_d)
     total = logic.consolidated_total(cash_bal, wallet_balances)
-    # Commission réelle du jour = somme des commissions par opérateur (grilles
-    # Wave/MTN incluses), pas seulement les commissions saisies à la transaction.
     commissions = sum(w["commission"] for w in wallet_states)
 
     # Dettes en cours non encore imputées : déduites de chaque poste ET du fond
     # de roulement (l'argent est sorti tant que le client n'a pas remboursé).
-    # Les commissions gagnées dans la journée s'ajoutent au fond de roulement :
-    # un dépôt/retrait transfère l'UV↔caisse (net nul), seul le gain de commission
-    # fait croître le total.
+    # Le fond de roulement = capital réel (UV + caisse) net des dettes ; un
+    # dépôt/retrait est un transfert neutre, la commission n'y est pas intégrée.
     dette_active = sum(dette_poste.values())
-    total_net = total - dette_active + commissions
+    total_net = total - dette_active
 
     nb_alertes = sum(1 for w in wallet_states if w["voyant"] == "rouge")
 

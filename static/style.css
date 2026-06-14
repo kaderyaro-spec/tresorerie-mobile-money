@@ -158,7 +158,8 @@ body {
 .block h3 { font-size: 15px; margin: 14px 0 8px; }
 .intro { color: var(--muted); margin: 0 0 16px; }
 label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: var(--muted); }
-input[type=tel], input[type=number], input[type=text], select {
+input[type=tel], input[type=number], input[type=text], input[type=password],
+input[type=month], input[type=email], select {
     width: 100%; padding: 14px; font-size: 17px;
     border: 1.5px solid var(--line); border-radius: 12px; background: #fff;
 }

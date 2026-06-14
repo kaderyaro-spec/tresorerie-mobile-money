@@ -57,6 +57,11 @@
         {% if w.threshold > 0 %}
         <span class="card-seuil">Seuil : {{ w.threshold | fcfa }}</span>
         {% endif %}
+        {% if w.voyant == 'rouge' %}
+        <span class="card-status rouge">⚠️ Sous le seuil — rechargez</span>
+        {% elif w.voyant == 'orange' %}
+        <span class="card-status orange">⚠️ Proche du seuil</span>
+        {% endif %}
         {% if w.prediction %}
         <span class="card-predict">🔮 Épuisement estimé vers <strong>{{ w.prediction.eta }}</strong>
             — pensez à recharger ~{{ w.prediction.suggestion | fcfa }} F</span>

@@ -193,6 +193,14 @@ input:focus, select:focus { outline: none; border-color: var(--green); }
 .choice-ico { font-size: 26px; }
 .choice.selected { border-color: var(--green); background: #eaf3f1; }
 .choice-link { background: #f7f9fa; }
+/* Réapprovisionnement : chaque type d'opération a sa couleur. */
+.choice-uv  { background: #e9f1fd; border-color: #b7d3f7; color: #14457e; }   /* Achat d'UV */
+.choice-in  { background: #e9f7ef; border-color: #b6e2c8; color: #176c3a; }   /* Dépôt en caisse */
+.choice-out { background: #fdecea; border-color: #f6c3bb; color: #9a3b2e; }   /* Retrait de caisse */
+.choice-uv .choice-ico, .choice-in .choice-ico, .choice-out .choice-ico { font-size: 26px; }
+.choice-uv.selected  { border-color: #14457e; background: #d7e6fb; }
+.choice-in.selected  { border-color: #176c3a; background: #d3efdf; }
+.choice-out.selected { border-color: #9a3b2e; background: #f9d9d3; }
 
 .form-actions { display: flex; gap: 12px; margin-top: 8px; }
 .form-actions .btn { flex: 1; }

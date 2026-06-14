@@ -26,9 +26,6 @@
             <span class="eye-wrap"><span class="eye-glyph">👁</span></span>
         </button>
     </div>
-    {% if s.dette_active > 0 %}
-    <div class="total-dette">📓 dont {{ s.dette_active | fcfa }} FCFA de dettes clients déduites</div>
-    {% endif %}
     <div class="total-sub">
         <span>🏪 {{ s.agent.shop_name or ((s.agent.prenom ~ ' ' ~ s.agent.nom) if s.agent.prenom else 'Ma boutique') }}</span>
         <span>🆔 N° {{ "%04d"|format(s.agent.id) }}</span>

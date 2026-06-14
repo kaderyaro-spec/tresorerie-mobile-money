@@ -62,10 +62,6 @@
         {% elif w.voyant == 'orange' %}
         <span class="card-status orange">⚠️ Proche du seuil</span>
         {% endif %}
-        {% if w.prediction %}
-        <span class="card-predict">🔮 Épuisement estimé vers <strong>{{ w.prediction.eta }}</strong>
-            — pensez à recharger ~{{ w.prediction.suggestion | fcfa }} F</span>
-        {% endif %}
     </div>
     {% endfor %}
 </div>

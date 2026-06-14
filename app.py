@@ -44,7 +44,7 @@ app.jinja_env.filters["fcfa"] = fmt
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "22"
+ASSET_VERSION = "23"
 
 
 @app.context_processor
@@ -1186,11 +1186,21 @@ def dettes():
 @app.route("/dettes/<int:dette_id>/regler", methods=["POST"])
 def dette_regler(dette_id):
     conn = db.get_db()
-    conn.execute("UPDATE dette SET settled_at=? WHERE id=? AND agent_id=?",
-                 (db.now_str(), dette_id, session["agent_id"]))
+    aid = session["agent_id"]
+    d = conn.execute(
+        "SELECT * FROM dette WHERE id=? AND agent_id=? AND settled_at IS NULL",
+        (dette_id, aid)).fetchone()
+    if not d:
+        conn.close()
+        flash("Dette introuvable ou déjà réglée.", "error")
+        return redirect(url_for("dettes"))
+    conn.execute("UPDATE dette SET settled_at=? WHERE id=?", (db.now_str(), dette_id))
     conn.commit()
     conn.close()
-    flash("Dette marquée comme réglée. ✓", "success")
+    # Remboursement encaissé : entrée d'espèces en caisse → augmente la caisse
+    # ET le fond de roulement (mouvement réel enregistré dans l'historique).
+    _save_operation(tx_type="depot_caisse", wallet_id=None, amount=d["amount"])
+    flash(f"Dette réglée : {fmt(d['amount'])} FCFA encaissés en caisse. ✓", "success")
     return redirect(url_for("dettes"))
 
 

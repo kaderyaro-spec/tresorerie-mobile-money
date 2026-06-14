@@ -25,18 +25,18 @@
             <div class="op-fields" id="fields-{{ op }}" hidden>
                 <div class="field-inline">
                     <label>Solde UV</label>
-                    <input type="number" name="solde_{{ op }}" inputmode="numeric" placeholder="0" min="0">
+                    <input type="text" name="solde_{{ op }}" inputmode="numeric" class="js-money" placeholder="0">
                 </div>
                 <div class="field-inline">
                     <label>Seuil alerte</label>
-                    <input type="number" name="seuil_{{ op }}" inputmode="numeric" placeholder="0" min="0">
+                    <input type="text" name="seuil_{{ op }}" inputmode="numeric" class="js-money" placeholder="0">
                 </div>
             </div>
         </div>
         {% endfor %}
 
         <label class="lbl-mt">Solde de caisse (espèces) de départ</label>
-        <input type="number" name="cash_initial" inputmode="numeric" placeholder="0" min="0">
+        <input type="text" name="cash_initial" inputmode="numeric" class="js-money" placeholder="0">
 
         <button type="submit" class="btn btn-primary btn-block btn-lg">Continuer</button>
     </form>

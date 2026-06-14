@@ -285,6 +285,9 @@ input:focus, select:focus { outline: none; border-color: var(--green); }
 .dette-actions .btn { flex: 1; padding: 10px; font-size: 14px; }
 .dette-reglees { opacity: .65; }
 .dette-tag { display: block; color: #9a5b00; font-size: 12px; font-weight: 700; margin-top: 2px; }
+/* Nature de la dette (opérateur concerné ou caisse) — badge bien visible. */
+.dette-source { background: #f3ede1; color: #6b3d08; font-weight: 700;
+    padding: 2px 8px; border-radius: 999px; }
 .dette-info {
     background: #fff3e0; border: 1px solid #ffd9a8; border-radius: 12px;
     padding: 12px 14px; margin: 12px 0; font-size: 13px; line-height: 1.5; color: #6b4a12;
@@ -359,6 +362,14 @@ input:focus, select:focus { outline: none; border-color: var(--green); }
 .param-line span { color: var(--muted); }
 .add-op { margin-top: 16px; padding-top: 16px; border-top: 1.5px solid var(--line); }
 .add-op select { margin-bottom: 10px; }
+
+/* Aération : le bouton d'action ne doit jamais coller au dernier champ saisi
+   (Réglages : Mon compte, Sécurité, Automatisation…). */
+.card-form .btn-block { margin-top: 16px; }
+.card-form .btn-block + .btn-block { margin-top: 8px; }
+.card-form .hint + .btn-block,
+.card-form input + .btn-block,
+.card-form select + .btn-block { margin-top: 16px; }
 
 /* ----- Écrans d'authentification (connexion / inscription) ----- */
 .auth-screen {

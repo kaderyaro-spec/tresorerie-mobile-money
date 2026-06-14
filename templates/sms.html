@@ -26,7 +26,7 @@
                     <option value="{{ w.id }}" {% if s.parsed_operator == w.operator %}selected{% endif %}>{{ w.operator }}</option>
                     {% endfor %}
                 </select>
-                <input type="number" name="amount" inputmode="numeric" placeholder="Montant"
+                <input type="text" name="amount" inputmode="numeric" class="js-money" placeholder="Montant"
                        value="{{ s.parsed_amount | round(0,'floor') | int if s.parsed_amount else '' }}" required>
             </div>
             <div class="sms-actions">

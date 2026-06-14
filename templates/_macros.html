@@ -6,8 +6,8 @@
 {% macro phone_field(value="", autofocus=false) %}
 <div class="phone-field">
     <span class="phone-prefix">🇨🇮 +225</span>
-    <input type="tel" name="phone" inputmode="numeric" pattern="[0-9]{10}" maxlength="10"
-           value="{{ value }}" placeholder="07 00 00 00 00" required {% if autofocus %}autofocus{% endif %}>
+    <input type="tel" name="phone" inputmode="numeric" class="js-phone" pattern="[0-9 ]{10,14}" maxlength="14"
+           value="{{ value | phone }}" placeholder="07 00 00 00 00" required {% if autofocus %}autofocus{% endif %}>
 </div>
 {% endmacro %}
 

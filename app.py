@@ -41,10 +41,23 @@ def fmt(montant):
 app.jinja_env.filters["fcfa"] = fmt
 
 
+def fmt_phone(raw):
+    """Affiche un numéro en groupes de 2 : « 07 10 10 10 10 »."""
+    digits = "".join(c for c in str(raw or "") if c.isdigit())
+    if digits.startswith("225") and len(digits) > 10:
+        digits = digits[3:]
+    if not digits:
+        return ""
+    return " ".join(digits[i:i + 2] for i in range(0, len(digits), 2))
+
+
+app.jinja_env.filters["phone"] = fmt_phone
+
+
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "23"
+ASSET_VERSION = "24"
 
 
 @app.context_processor
@@ -1174,8 +1187,10 @@ def dettes():
         "WHERE d.agent_id=? AND d.settled_at IS NULL ORDER BY d.created_at DESC", (aid,)
     ).fetchall()
     reglees = conn.execute(
-        "SELECT * FROM dette WHERE agent_id=? AND settled_at IS NOT NULL "
-        "ORDER BY settled_at DESC LIMIT 20", (aid,)
+        "SELECT d.*, w.operator AS operator, w.label AS wallet_label FROM dette d "
+        "LEFT JOIN wallet w ON d.wallet_id = w.id "
+        "WHERE d.agent_id=? AND d.settled_at IS NOT NULL "
+        "ORDER BY d.settled_at DESC LIMIT 20", (aid,)
     ).fetchall()
     conn.close()
     total = sum(d["amount"] for d in en_cours)
@@ -1567,7 +1582,7 @@ def parametres():
 
         if action == "account":
             shop_name = request.form.get("shop_name", "").strip()
-            phone = request.form.get("phone", "").strip()
+            phone = normalize_phone(request.form.get("phone", ""))
             if not phone:
                 flash("Le numéro de téléphone est obligatoire.", "error")
             else:

@@ -126,10 +126,42 @@
   // Exposé pour les pages de saisie
   window.AppOffline = { submitOperation: submitOperation, sync: sync };
 
+  /* -----------------------------------------------------------------------
+   * Mise en forme automatique des saisies (présentation uniforme partout) :
+   *  - montants  → séparateur de milliers « 5 000 »   (champs .js-money)
+   *  - téléphone → groupes de 2 « 07 10 10 10 10 »     (champs .js-phone)
+   * Le serveur ne garde que les chiffres : les espaces n'ont aucun impact.
+   * --------------------------------------------------------------------- */
+  function groupMoney(value) {
+    var d = String(value).replace(/\D/g, "");
+    if (!d) return "";
+    return d.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  }
+  function groupPhone(value) {
+    var d = String(value).replace(/\D/g, "").slice(0, 10);
+    return d.replace(/(\d{2})(?=\d)/g, "$1 ");
+  }
+  function attachFormatter(el, formatter) {
+    el.addEventListener("input", function () {
+      el.value = formatter(el.value);
+      try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) {}
+    });
+    if (el.value) el.value = formatter(el.value);   // mise en forme initiale
+  }
+  function initFormatters() {
+    document.querySelectorAll(".js-money").forEach(function (el) {
+      attachFormatter(el, groupMoney);
+    });
+    document.querySelectorAll(".js-phone").forEach(function (el) {
+      attachFormatter(el, groupPhone);
+    });
+  }
+
   // Synchronisation : au chargement, au retour du réseau, et toutes les 30 s
   window.addEventListener("online", sync);
   document.addEventListener("DOMContentLoaded", function () {
     updateBanner();
+    initFormatters();
     sync();
     setInterval(sync, 30000);
   });

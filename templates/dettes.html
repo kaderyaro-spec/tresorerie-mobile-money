@@ -15,9 +15,9 @@
         <label>Nom du client *</label>
         <input type="text" name="client_name" placeholder="Ex : Moussa du garage" required>
         <label class="lbl-mt">Téléphone (optionnel)</label>
-        <input type="tel" name="client_phone" inputmode="numeric" placeholder="07 00 00 00 00">
+        <input type="tel" name="client_phone" inputmode="numeric" class="js-phone" placeholder="07 00 00 00 00">
         <label class="lbl-mt">Montant (FCFA) *</label>
-        <input type="number" name="amount" inputmode="numeric" class="med-input" placeholder="0" min="1" required>
+        <input type="text" name="amount" inputmode="numeric" class="med-input js-money" placeholder="0" required>
 
         <label class="lbl-mt">Nature de la dette *</label>
         <select name="op_type" id="dette-type" required>
@@ -53,11 +53,13 @@
             <span class="tx-amount neg">{{ d.amount | fcfa }} FCFA</span>
         </div>
         <div class="tx-meta">
+            {% set src = '💵 Caisse' if d.op_type == 'retrait_caisse' else (wallet_name(d.operator, d.wallet_label) if d.operator else None) %}
+            {% if src %}<span class="dette-source">🏦 {{ src }}</span>{% endif %}
             {% if d.op_type %}
-            <span>{{ tx_types[d.op_type].label if d.op_type in tx_types else d.op_type }}{% if d.operator %} · {{ wallet_name(d.operator, d.wallet_label) }}{% elif d.op_type == 'retrait_caisse' %} · Caisse{% endif %}</span>
+            <span>{{ tx_types[d.op_type].label if d.op_type in tx_types else d.op_type }}</span>
             {% endif %}
             {% if d.accounted %}<span>✔ imputée à la clôture</span>{% endif %}
-            {% if d.client_phone %}<span>📞 {{ d.client_phone }}</span>{% endif %}
+            {% if d.client_phone %}<span>📞 {{ d.client_phone | phone }}</span>{% endif %}
             <span>{{ d.created_at }}</span>
             {% if d.note %}<span>📝 {{ d.note }}</span>{% endif %}
         </div>
@@ -86,7 +88,11 @@
             <span class="tx-type">✓ {{ d.client_name }}</span>
             <span class="tx-amount pos">{{ d.amount | fcfa }} FCFA</span>
         </div>
-        <div class="tx-meta"><span>Réglée le {{ d.settled_at }}</span></div>
+        <div class="tx-meta">
+            {% set src = '💵 Caisse' if d.op_type == 'retrait_caisse' else (wallet_name(d.operator, d.wallet_label) if d.operator else None) %}
+            {% if src %}<span class="dette-source">🏦 {{ src }}</span>{% endif %}
+            <span>Réglée le {{ d.settled_at }}</span>
+        </div>
     </li>
     {% endfor %}
 </ul>

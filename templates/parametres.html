@@ -16,7 +16,7 @@
     <label class="lbl-mt">Nom de la boutique</label>
     <input type="text" name="shop_name" value="{{ agent.shop_name or '' }}" placeholder="Ex : Kiosque Wend-Konta">
     <label class="lbl-mt">Numéro de téléphone</label>
-    <input type="tel" name="phone" value="{{ agent.phone }}" required>
+    <input type="tel" name="phone" inputmode="numeric" class="js-phone" maxlength="14" value="{{ agent.phone | phone }}" required>
     <button type="submit" class="btn btn-primary btn-block">Enregistrer le compte</button>
 </form>
 
@@ -25,9 +25,7 @@
 <form method="post" class="block card-form">
     <input type="hidden" name="action" value="set_pin">
     <h2>🔒 Code de connexion (PIN)</h2>
-    <p class="param-line"><span>État</span>
-        <strong>{% if agent.pin_hash %}✅ Code défini{% else %}❌ Aucun code{% endif %}</strong></p>
-    <label class="lbl-mt">Nouveau code PIN</label>
+    <label>Nouveau code PIN</label>
     <input type="password" name="pin" inputmode="numeric" pattern="[0-9]*"
            placeholder="4 chiffres minimum" minlength="4">
     <button type="submit" class="btn btn-primary btn-block">Enregistrer le code</button>
@@ -35,8 +33,6 @@
 
 <section class="block card-form">
     <h2>🛟 Code de secours</h2>
-    <p class="param-line"><span>État</span>
-        <strong>{% if agent.recovery_hash %}✅ Code défini{% else %}❌ Aucun code{% endif %}</strong></p>
     {% if recovery_code %}
     <div class="recovery-code">{{ recovery_code }}</div>
     <div class="recovery-warn">⚠️ Notez ce code maintenant : il ne sera <strong>plus jamais affiché</strong>.
@@ -59,7 +55,7 @@
     {% for w in wallets %}
     <div class="field-inline">
         <label>{{ wallet_name(w.operator, w.label) }}</label>
-        <input type="number" name="seuil_{{ w.id }}" inputmode="numeric" value="{{ w.alert_threshold | round(0,'floor') | int }}">
+        <input type="text" name="seuil_{{ w.id }}" inputmode="numeric" class="js-money" value="{{ w.alert_threshold | round(0,'floor') | int }}">
     </div>
     {% endfor %}
     <button type="submit" class="btn btn-primary btn-block">Enregistrer les seuils</button>
@@ -91,11 +87,11 @@
         </div>
         <div class="field-inline">
             <label>Solde UV</label>
-            <input type="number" name="new_opening" inputmode="numeric" placeholder="0">
+            <input type="text" name="new_opening" inputmode="numeric" class="js-money" placeholder="0">
         </div>
         <div class="field-inline">
             <label>Seuil alerte</label>
-            <input type="number" name="new_seuil" inputmode="numeric" placeholder="0">
+            <input type="text" name="new_seuil" inputmode="numeric" class="js-money" placeholder="0">
         </div>
         <button type="submit" class="btn btn-primary btn-block">Ajouter le compte</button>
     </form>

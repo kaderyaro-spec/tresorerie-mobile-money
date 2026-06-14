@@ -99,6 +99,8 @@ body {
 .total-value { display: block; font-size: 34px; font-weight: 800; margin: 4px 0 10px; }
 .total-value small { font-size: 16px; font-weight: 600; opacity: .85; }
 .total-sub { display: flex; flex-direction: column; gap: 4px; font-size: 14px; opacity: .95; }
+.total-dette { font-size: 13px; font-weight: 600; opacity: .95; margin: 2px 0 8px; }
+.card-dette { display: block; font-size: 12px; font-weight: 700; color: #9a5b00; margin-top: 2px; }
 
 .alert-bar {
     background: #fff3e0; color: var(--orange);
@@ -338,6 +340,9 @@ input:focus, select:focus { outline: none; border-color: var(--green); }
 
 /* Journal des clôtures & exports */
 .journal-link { display: block; text-decoration: none; color: inherit; }
+.tx-meta .neg { color: var(--red); font-weight: 700; }
+.tx-meta .pos { color: var(--green); font-weight: 700; }
+.journal-dette { color: #9a5b00; font-weight: 700; }
 .journal-btn { margin-top: 14px; }
 .export-row { display: flex; gap: 10px; margin: 12px 0; }
 .export-row .btn { flex: 1; padding: 12px; font-size: 14px; }

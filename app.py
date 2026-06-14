@@ -57,7 +57,7 @@ app.jinja_env.filters["phone"] = fmt_phone
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "25"
+ASSET_VERSION = "26"
 
 
 @app.context_processor
@@ -195,6 +195,11 @@ def compute_state():
     total = logic.consolidated_total(cash_bal, wallet_balances)
     commissions = logic.commissions_total(txs_d)
 
+    # Dettes en cours non encore imputées : déduites de chaque poste ET du fond
+    # de roulement (l'argent est sorti tant que le client n'a pas remboursé).
+    dette_active = sum(dette_poste.values())
+    total_net = total - dette_active
+
     nb_alertes = sum(1 for w in wallet_states if w["voyant"] == "rouge")
 
     return {
@@ -203,6 +208,8 @@ def compute_state():
         "wallets": wallet_states,
         "cash": cash_bal,
         "total": total,
+        "total_net": total_net,
+        "dette_active": dette_active,
         "commissions": commissions,
         "nb_alertes": nb_alertes,
         "dettes": dettes_total,
@@ -1109,7 +1116,8 @@ def journal():
     clotures = conn.execute(
         "SELECT c.id, c.date, c.created_at, "
         "       COALESCE(SUM(l.ecart), 0) AS total_ecart, "
-        "       COALESCE(SUM(l.commission), 0) AS total_commission "
+        "       COALESCE(SUM(l.commission), 0) AS total_commission, "
+        "       COALESCE(SUM(l.dette), 0) AS total_dette "
         "FROM cloture c LEFT JOIN cloture_line l ON l.cloture_id = c.id "
         "WHERE c.agent_id=? "
         # Une seule entrée par date (la plus récente) : masque les anciens doublons

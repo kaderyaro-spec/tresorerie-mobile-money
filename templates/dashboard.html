@@ -21,11 +21,14 @@
 <div class="total-banner" id="solde-banner">
     <span class="total-label">Fond de roulement</span>
     <div class="total-value-row">
-        <span class="total-value"><span class="masquable" data-clear="{{ s.total | fcfa }}">{{ s.total | fcfa }}</span> <small>FCFA</small></span>
+        <span class="total-value"><span class="masquable" data-clear="{{ s.total_net | fcfa }}">{{ s.total_net | fcfa }}</span> <small>FCFA</small></span>
         <button type="button" id="toggle-solde" class="eye-inline" aria-label="Masquer ou afficher le solde">
             <span class="eye-wrap"><span class="eye-glyph">👁</span></span>
         </button>
     </div>
+    {% if s.dette_active > 0 %}
+    <div class="total-dette">📓 dont {{ s.dette_active | fcfa }} FCFA de dettes clients déduites</div>
+    {% endif %}
     <div class="total-sub">
         <span>🏪 {{ s.agent.shop_name or ((s.agent.prenom ~ ' ' ~ s.agent.nom) if s.agent.prenom else 'Ma boutique') }}</span>
         <span>🆔 N° {{ "%04d"|format(s.agent.id) }}</span>
@@ -43,7 +46,10 @@
 <div class="cards">
     <div class="card card-cash">
         <span class="card-op">💵 Caisse (espèces)</span>
-        <span class="card-bal">{{ s.cash | fcfa }} <small>FCFA</small></span>
+        <span class="card-bal">{{ (s.cash - s.cash_dette) | fcfa }} <small>FCFA</small></span>
+        {% if s.cash_dette > 0 %}
+        <span class="card-dette">📓 − {{ s.cash_dette | fcfa }} FCFA de dettes</span>
+        {% endif %}
     </div>
 
     {% for w in s.wallets %}
@@ -53,7 +59,10 @@
             {{ op_logo(w.operator) }}
             <span class="card-op">{{ w.name }}</span>
         </div>
-        <span class="card-bal"><span class="masquable" data-clear="{{ w.balance | fcfa }} ">{{ w.balance | fcfa }} </span><small>FCFA</small></span>
+        <span class="card-bal"><span class="masquable" data-clear="{{ (w.balance - w.dette) | fcfa }} ">{{ (w.balance - w.dette) | fcfa }} </span><small>FCFA</small></span>
+        {% if w.dette > 0 %}
+        <span class="card-dette">📓 − {{ w.dette | fcfa }} FCFA de dettes</span>
+        {% endif %}
         {% if w.threshold > 0 %}
         <span class="card-seuil">Seuil : {{ w.threshold | fcfa }}</span>
         {% endif %}

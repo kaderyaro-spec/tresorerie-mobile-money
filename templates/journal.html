@@ -10,13 +10,16 @@
         <a href="{{ url_for('cloture_recap', cloture_id=c.id) }}" class="journal-link">
             <div class="tx-main">
                 <span class="tx-type">🔒 Clôture du {{ c.date }}</span>
-                <span class="tx-amount {% if c.total_ecart < 0 %}neg{% elif c.total_ecart > 0 %}pos{% endif %}">
-                    {% if c.total_ecart > 0 %}+{% endif %}{{ c.total_ecart | fcfa }} FCFA
-                </span>
+                <span class="tx-amount pos">💰 {{ c.total_commission | fcfa }} FCFA</span>
             </div>
             <div class="tx-meta">
-                <span>Écart total{% if c.total_ecart == 0 %} : aucun ✓{% endif %}</span>
-                <span>💰 Commissions : {{ c.total_commission | fcfa }} FCFA</span>
+                <span>Commissions du jour</span>
+                <span class="{% if c.total_ecart < 0 %}neg{% elif c.total_ecart > 0 %}pos{% endif %}">
+                    {% if c.total_ecart == 0 %}Écart : aucun ✓{% else %}Écart : {% if c.total_ecart > 0 %}+{% endif %}{{ c.total_ecart | fcfa }} FCFA{% endif %}
+                </span>
+                {% if c.total_dette > 0 %}
+                <span class="journal-dette">📓 dont dettes : {{ c.total_dette | fcfa }} FCFA</span>
+                {% endif %}
                 <span>{{ c.created_at }}</span>
             </div>
         </a>

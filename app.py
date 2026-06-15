@@ -227,7 +227,7 @@ def require_onboarding():
 
 # Points d'entrée accessibles sans être connecté
 PUBLIC_ENDPOINTS = {
-    "login", "signup", "static", "index", "ping", "api_sms", "conditions",
+    "login", "signup", "static", "index", "ping", "health", "api_sms", "conditions",
     "onboarding_otp", "onboarding_pin", "onboarding_operators", "onboarding_services",
     "recovery_request", "recovery_newpin",
 }

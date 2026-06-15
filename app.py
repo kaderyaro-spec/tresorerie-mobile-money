@@ -347,6 +347,25 @@ def ping():
     return "ok", 200
 
 
+@app.route("/health")
+def health():
+    """Diagnostic : moteur de base de données et persistance (sans données perso)."""
+    info = {
+        "backend": "postgresql" if db.USE_PG else "sqlite (ephemere !)",
+        "database_url_set": bool(db.DATABASE_URL),
+    }
+    try:
+        conn = db.get_db()
+        row = conn.execute("SELECT COUNT(*) AS n FROM agent").fetchone()
+        conn.close()
+        info["agents"] = row["n"]
+        info["db_ok"] = True
+    except Exception as e:  # pragma: no cover
+        info["db_ok"] = False
+        info["error"] = str(e)[:200]
+    return info, 200
+
+
 @app.route("/")
 def index():
     if session.get("auth") and current_agent() is not None:

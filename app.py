@@ -57,7 +57,7 @@ app.jinja_env.filters["phone"] = fmt_phone
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "31"
+ASSET_VERSION = "32"
 
 
 @app.context_processor
@@ -573,7 +573,34 @@ def onboarding_pin():
             return redirect(url_for("onboarding_pin"))
         reg = session["reg"]
         reg["pin_hash"] = generate_password_hash(pin)
+        # Compte CRÉÉ dès le PIN : l'agent peut se connecter avec son numéro et
+        # son PIN même s'il n'achève pas le choix des opérateurs/services. Les
+        # portefeuilles et la caisse sont ajoutés aux étapes suivantes (ou plus
+        # tard dans Réglages). Évite les inscriptions « fantômes » non finalisées.
+        conn = db.get_db()
+        existing = conn.execute("SELECT id FROM agent WHERE phone=?",
+                                (reg["phone"],)).fetchone()
+        if existing is not None:
+            agent_id = existing["id"]
+            conn.execute(
+                "UPDATE agent SET nom=?, prenom=?, cni=?, pin_hash=?, phone_verified=? "
+                "WHERE id=?",
+                (reg["nom"], reg["prenom"], reg["cni"], reg["pin_hash"],
+                 1 if reg.get("otp_ok") else 0, agent_id))
+        else:
+            cur = conn.execute(
+                "INSERT INTO agent (phone, nom, prenom, cni, business_day, pin_hash, "
+                " phone_verified, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                (reg["phone"], reg["nom"], reg["prenom"], reg["cni"], db.today_str(),
+                 reg["pin_hash"], 1 if reg.get("otp_ok") else 0, db.now_str()))
+            agent_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+        reg["agent_id"] = agent_id
         session["reg"] = reg
+        session.permanent = True
+        session["agent_id"] = agent_id
+        session["auth"] = True
         return redirect(url_for("onboarding_operators"))
 
     return render_template("onboarding_pin.html", step=1)
@@ -615,21 +642,17 @@ def onboarding_operators():
 @app.route("/inscription/services", methods=["GET", "POST"])
 def onboarding_services():
     reg = session.get("reg")
-    if not reg or "ops" not in reg:
+    agent_id = session.get("agent_id")
+    # Le compte existe déjà (créé à l'étape PIN) ; il faut juste les portefeuilles.
+    if not reg or "ops" not in reg or not agent_id:
         return redirect(url_for("signup"))
 
     if request.method == "POST":
         services = request.form.getlist("services")
 
         conn = db.get_db()
-        cur = conn.execute(
-            "INSERT INTO agent (phone, nom, prenom, cni, business_day, pin_hash, "
-            " phone_verified, created_at) VALUES (?,?,?,?,?,?,?,?)",
-            (reg["phone"], reg["nom"], reg["prenom"], reg["cni"],
-             db.today_str(), reg["pin_hash"], 1 if reg.get("otp_ok") else 0, db.now_str()),
-        )
-        agent_id = cur.lastrowid
-
+        # (Re)pose proprement les portefeuilles et la caisse de ce compte.
+        conn.execute("DELETE FROM wallet WHERE agent_id=?", (agent_id,))
         for o in reg["ops"]:
             conn.execute(
                 "INSERT INTO wallet (agent_id, operator, opening_balance, alert_threshold) "
@@ -642,10 +665,12 @@ def onboarding_services():
                 "VALUES (?,?,0,0)",
                 (agent_id, srv),
             )
-        conn.execute(
-            "INSERT INTO caisse (agent_id, opening_balance) VALUES (?,?)",
-            (agent_id, reg.get("cash", 0)),
-        )
+        if conn.execute("SELECT id FROM caisse WHERE agent_id=?", (agent_id,)).fetchone():
+            conn.execute("UPDATE caisse SET opening_balance=? WHERE agent_id=?",
+                         (reg.get("cash", 0), agent_id))
+        else:
+            conn.execute("INSERT INTO caisse (agent_id, opening_balance) VALUES (?,?)",
+                         (agent_id, reg.get("cash", 0)))
         conn.commit()
         conn.close()
 
@@ -657,7 +682,7 @@ def onboarding_services():
         conn2.commit()
         conn2.close()
 
-        session.clear()
+        session.pop("reg", None)
         session.permanent = True
         session["agent_id"] = agent_id
         session["auth"] = True

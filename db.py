@@ -120,6 +120,7 @@ CREATE TABLE IF NOT EXISTS agent (
     cni                 TEXT,                   -- numéro de carte d'identité (CNI)
     shop_name           TEXT,                   -- nom de la boutique
     subscription_status TEXT NOT NULL DEFAULT 'Essai gratuit',
+    subscription_until  TEXT,                   -- échéance d'abonnement (AAAA-MM-JJ) ; NULL = essai
     business_day        TEXT NOT NULL,          -- journée comptable ouverte
     pin_hash            TEXT,                   -- code de connexion (haché)
     recovery_hash       TEXT,                   -- code de récupération du PIN (haché)
@@ -247,6 +248,9 @@ def _migrate(conn):
         conn.execute("ALTER TABLE agent ADD COLUMN phone_verified INTEGER NOT NULL DEFAULT 0")
     if "sms_auto" not in acols:
         conn.execute("ALTER TABLE agent ADD COLUMN sms_auto INTEGER NOT NULL DEFAULT 1")
+    if "subscription_until" not in acols:
+        # Date d'échéance d'abonnement (AAAA-MM-JJ) ; NULL = essai gratuit.
+        conn.execute("ALTER TABLE agent ADD COLUMN subscription_until TEXT")
     tcols = conn.column_names("transaction")
     if "client_uid" not in tcols:
         conn.execute('ALTER TABLE "transaction" ADD COLUMN client_uid TEXT')

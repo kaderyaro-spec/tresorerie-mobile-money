@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Espace gérant{% endblock %}
+{% block header %}Espace gérant{% endblock %}
+{% block nav %}{% endblock %}
+
+{% block content %}
+<div class="auth-screen">
+    <div class="auth-logo">🔐</div>
+    <h1 class="auth-title">Espace gérant</h1>
+    <p class="auth-sub">Suivi des abonnements des agents. Accès réservé.</p>
+
+    <form method="post" class="auth-form">
+        <label>Clé administrateur</label>
+        <input type="password" name="key" placeholder="Votre clé d'accès" autofocus required>
+        <button type="submit" class="btn btn-primary btn-block btn-lg">Entrer</button>
+    </form>
+</div>
+{% endblock %}

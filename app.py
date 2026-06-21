@@ -57,7 +57,7 @@ app.jinja_env.filters["phone"] = fmt_phone
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "33"
+ASSET_VERSION = "34"
 
 
 @app.context_processor
@@ -230,6 +230,8 @@ PUBLIC_ENDPOINTS = {
     "login", "signup", "static", "index", "ping", "health", "api_sms", "conditions",
     "onboarding_otp", "onboarding_pin", "onboarding_operators", "onboarding_services",
     "recovery_request", "recovery_newpin",
+    # Panneau gérant : protégé par sa propre clé (ADMIN_KEY), pas par la session agent.
+    "admin_login", "admin", "admin_sub", "admin_logout",
 }
 
 
@@ -317,6 +319,25 @@ def current_agent():
     return db.get_agent_by_id(session.get("agent_id"))
 
 
+def subscription_info(agent):
+    """Statut d'abonnement calculé d'un agent : essai / actif / expiré (+ échéance)."""
+    try:
+        until = agent["subscription_until"]
+    except (KeyError, IndexError, TypeError):
+        until = None
+    today = db.today_str()
+    if not until:
+        return {"state": "trial", "label": "Essai gratuit", "until": None}
+    if until >= today:
+        return {"state": "active", "label": f"Actif jusqu'au {until}", "until": until}
+    return {"state": "expired", "label": f"Expiré le {until}", "until": until}
+
+
+# Clé d'accès au panneau gérant (suivi des abonnements). À définir dans Render
+# via la variable d'environnement ADMIN_KEY (secret). Repli pour le développement.
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "tresorier-admin-2026")
+
+
 # Écrans réservés au gérant (un employé connecté n'y accède pas)
 GERANT_ONLY = {"parametres", "rapport", "export_csv", "export_pdf"}
 
@@ -364,6 +385,85 @@ def health():
         info["db_ok"] = False
         info["error"] = str(e)[:200]
     return info, 200
+
+
+# ---------------------------------------------------------------------------
+# Panneau gérant — suivi des abonnements des agents (accès par clé ADMIN_KEY)
+# ---------------------------------------------------------------------------
+@app.route("/admin/connexion", methods=["GET", "POST"])
+def admin_login():
+    if request.method == "POST":
+        if ADMIN_KEY and request.form.get("key", "") == ADMIN_KEY:
+            session["is_admin"] = True
+            return redirect(url_for("admin"))
+        flash("Clé administrateur incorrecte.", "error")
+        return redirect(url_for("admin_login"))
+    return render_template("admin_login.html")
+
+
+@app.route("/admin")
+def admin():
+    if not session.get("is_admin"):
+        return redirect(url_for("admin_login"))
+    conn = db.get_db()
+    agents = conn.execute(
+        "SELECT id, shop_name, nom, prenom, phone, created_at, subscription_until "
+        "FROM agent ORDER BY id DESC").fetchall()
+    conn.close()
+    rows = [{"a": a, "info": subscription_info(a)} for a in agents]
+    stats = {
+        "total": len(rows),
+        "active": sum(1 for r in rows if r["info"]["state"] == "active"),
+        "expired": sum(1 for r in rows if r["info"]["state"] == "expired"),
+        "trial": sum(1 for r in rows if r["info"]["state"] == "trial"),
+    }
+    return render_template("admin.html", rows=rows, stats=stats)
+
+
+@app.route("/admin/abonnement", methods=["POST"])
+def admin_sub():
+    if not session.get("is_admin"):
+        return redirect(url_for("admin_login"))
+    from datetime import datetime, timedelta
+    aid = request.form.get("agent_id")
+    action = request.form.get("action")
+    conn = db.get_db()
+    a = conn.execute("SELECT subscription_until FROM agent WHERE id=?", (aid,)).fetchone()
+    if not a:
+        conn.close()
+        flash("Agent introuvable.", "error")
+        return redirect(url_for("admin"))
+    today = datetime.strptime(db.today_str(), "%Y-%m-%d")
+    # On prolonge à partir de l'échéance en cours si elle est dans le futur.
+    base = today
+    if a["subscription_until"]:
+        try:
+            d = datetime.strptime(a["subscription_until"], "%Y-%m-%d")
+            base = d if d > today else today
+        except ValueError:
+            pass
+    new_until = None
+    if action == "plus_mois":
+        new_until = (base + timedelta(days=30)).strftime("%Y-%m-%d")
+    elif action == "plus_an":
+        new_until = (base + timedelta(days=365)).strftime("%Y-%m-%d")
+    elif action == "date":
+        new_until = (request.form.get("date", "").strip() or None)
+    elif action == "reset":
+        new_until = None
+    status = "Abonné" if new_until else "Essai gratuit"
+    conn.execute("UPDATE agent SET subscription_until=?, subscription_status=? WHERE id=?",
+                 (new_until, status, aid))
+    conn.commit()
+    conn.close()
+    flash("Abonnement mis à jour. ✓", "success")
+    return redirect(url_for("admin"))
+
+
+@app.route("/admin/deconnexion", methods=["POST"])
+def admin_logout():
+    session.pop("is_admin", None)
+    return redirect(url_for("admin_login"))
 
 
 @app.route("/")
@@ -1809,6 +1909,7 @@ def parametres():
 
     return render_template("parametres.html", agent=agent, wallets=wallets, dispo=dispo,
                            employees=employees, devices=devices,
+                           sub=subscription_info(agent),
                            recovery_code=session.pop("show_recovery", None))
 
 

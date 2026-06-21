@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Abonnements{% endblock %}
+{% block header %}Abonnements des agents{% endblock %}
+{% block nav %}{% endblock %}
+
+{% block content %}
+<div class="admin-stats">
+    <div class="admin-stat"><span class="num">{{ stats.total }}</span><span>Agents</span></div>
+    <div class="admin-stat ok"><span class="num">{{ stats.active }}</span><span>Abonnés</span></div>
+    <div class="admin-stat warn"><span class="num">{{ stats.trial }}</span><span>Essai</span></div>
+    <div class="admin-stat bad"><span class="num">{{ stats.expired }}</span><span>Expirés</span></div>
+</div>
+
+{% if rows %}
+<ul class="tx-list">
+    {% for r in rows %}
+    <li class="tx-item">
+        <div class="tx-main">
+            <span class="tx-type">🏪 {{ r.a.shop_name or ((r.a.prenom ~ ' ' ~ r.a.nom) if r.a.prenom else 'Agent') }}</span>
+            <span class="sub-badge sub-{{ r.info.state }}">
+                {% if r.info.state == 'active' %}✅ Abonné{% elif r.info.state == 'expired' %}❌ Expiré{% else %}🕊 Essai{% endif %}
+            </span>
+        </div>
+        <div class="tx-meta">
+            <span>🆔 N° {{ "%04d"|format(r.a.id) }}</span>
+            <span>📞 {{ r.a.phone | phone }}</span>
+            <span>{{ r.info.label }}</span>
+            <span>Inscrit le {{ r.a.created_at[:10] }}</span>
+        </div>
+        <div class="admin-actions">
+            <form method="post" action="{{ url_for('admin_sub') }}">
+                <input type="hidden" name="agent_id" value="{{ r.a.id }}">
+                <input type="hidden" name="action" value="plus_mois">
+                <button type="submit" class="btn btn-secondary">+1 mois</button>
+            </form>
+            <form method="post" action="{{ url_for('admin_sub') }}">
+                <input type="hidden" name="agent_id" value="{{ r.a.id }}">
+                <input type="hidden" name="action" value="plus_an">
+                <button type="submit" class="btn btn-secondary">+1 an</button>
+            </form>
+            <form method="post" action="{{ url_for('admin_sub') }}" class="admin-date-form">
+                <input type="hidden" name="agent_id" value="{{ r.a.id }}">
+                <input type="hidden" name="action" value="date">
+                <input type="date" name="date" value="{{ r.info.until or '' }}">
+                <button type="submit" class="btn btn-outline">Fixer</button>
+            </form>
+            <form method="post" action="{{ url_for('admin_sub') }}"
+                  onsubmit="return confirm('Repasser cet agent en essai gratuit ?');">
+                <input type="hidden" name="agent_id" value="{{ r.a.id }}">
+                <input type="hidden" name="action" value="reset">
+                <button type="submit" class="btn-del">Essai</button>
+            </form>
+        </div>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p class="empty">Aucun agent enregistré pour le moment.</p>
+{% endif %}
+
+<form method="post" action="{{ url_for('admin_logout') }}" class="block">
+    <button type="submit" class="btn btn-outline btn-block" style="margin-top:16px">Se déconnecter de l'espace gérant</button>
+</form>
+{% endblock %}

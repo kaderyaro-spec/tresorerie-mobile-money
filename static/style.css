@@ -347,6 +347,23 @@ input:focus, select:focus { outline: none; border-color: var(--green); }
 .btn-whatsapp { background: #25D366; color: #fff; margin-top: 14px; }
 
 /* Journal des clôtures & exports */
+/* ----- Panneau gérant (abonnements) ----- */
+.admin-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+.admin-stat { background: var(--card); border-radius: 12px; padding: 10px 4px; text-align: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06); display: flex; flex-direction: column; gap: 2px; }
+.admin-stat .num { font-size: 22px; font-weight: 800; }
+.admin-stat span:not(.num) { font-size: 11px; color: var(--muted); }
+.admin-stat.ok .num { color: var(--green); }
+.admin-stat.warn .num { color: #b8860b; }
+.admin-stat.bad .num { color: var(--red); }
+.sub-badge { font-size: 12px; font-weight: 800; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.sub-active { background: #e9f7ef; color: #176c3a; }
+.sub-expired { background: #fdecea; color: #9a3b2e; }
+.sub-trial { background: #fff5e6; color: #8a5a00; }
+.admin-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+.admin-actions .btn, .admin-actions .btn-del { padding: 8px 12px; font-size: 14px; width: auto; }
+.admin-date-form { display: flex; gap: 6px; align-items: center; }
+.admin-date-form input[type=date] { width: auto; padding: 7px 9px; font-size: 14px; }
 .journal-link { display: block; text-decoration: none; color: inherit; }
 /* Journal : date a gauche, commission a droite, meme taille, ligne nette. */
 .journal-link .tx-main { align-items: center; gap: 10px; }

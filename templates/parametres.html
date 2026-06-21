@@ -11,7 +11,8 @@
     <input type="hidden" name="action" value="account">
     <h2>👤 Identité & boutique</h2>
     <p class="param-line"><span>Identifiant</span><strong>#{{ "%04d"|format(agent.id) }}</strong></p>
-    <p class="param-line"><span>Abonnement</span><strong>{{ agent.subscription_status }}</strong></p>
+    <p class="param-line"><span>Abonnement</span>
+        <strong class="sub-badge sub-{{ sub.state }}">{{ sub.label }}</strong></p>
     <p class="param-line"><span>Journée en cours</span><strong>{{ agent.business_day }}</strong></p>
     <label class="lbl-mt">Nom de la boutique</label>
     <input type="text" name="shop_name" value="{{ agent.shop_name or '' }}" placeholder="Ex : Kiosque Wend-Konta">

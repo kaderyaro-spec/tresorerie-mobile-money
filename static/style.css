@@ -107,6 +107,15 @@ body {
     border: 1px solid #ffd9a8; border-radius: 12px;
     padding: 12px 14px; margin-bottom: 14px; font-weight: 700;
 }
+.expired-bar {
+    background: #fdecea; color: #9a3b2e;
+    border: 1px solid #f6c3bb; border-radius: 12px;
+    padding: 12px 14px; margin-bottom: 14px; font-weight: 700; font-size: 14px;
+}
+.expired-card { text-align: center; }
+.expired-card h2 { margin-top: 6px; }
+.expired-card .hint { font-size: 14px; }
+.expired-ico { font-size: 44px; }
 
 /* ----- Cards ----- */
 .cards { display: flex; flex-direction: column; gap: 12px; margin-bottom: 18px; }

@@ -57,7 +57,7 @@ app.jinja_env.filters["phone"] = fmt_phone
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "34"
+ASSET_VERSION = "35"
 
 
 @app.context_processor
@@ -341,6 +341,14 @@ ADMIN_KEY = os.environ.get("ADMIN_KEY", "tresorier-admin-2026")
 # Écrans réservés au gérant (un employé connecté n'y accède pas)
 GERANT_ONLY = {"parametres", "rapport", "export_csv", "export_pdf"}
 
+# Fonctionnalités « premium » coupées quand l'abonnement est EXPIRÉ. L'agent
+# garde l'accès à l'application (tableau de bord, saisies) mais perd la clôture,
+# l'historique, les rapports et les exports jusqu'au renouvellement.
+SUBSCRIPTION_LOCKED = {
+    "cloture", "cloture_recap", "historique", "rapport",
+    "export_csv", "export_pdf", "journal", "telechargements",
+}
+
 
 @app.before_request
 def require_login():
@@ -350,7 +358,8 @@ def require_login():
     """
     if request.endpoint in PUBLIC_ENDPOINTS:
         return None
-    if not session.get("auth") or current_agent() is None:
+    agent = current_agent()
+    if not session.get("auth") or agent is None:
         session.pop("auth", None)
         # Les appels API (sync hors-ligne) reçoivent un statut JSON, pas une page.
         if request.path.startswith("/api/"):
@@ -359,6 +368,13 @@ def require_login():
     if request.endpoint in GERANT_ONLY and session.get("employee_id"):
         flash("Cette section est réservée au gérant.", "error")
         return redirect(url_for("dashboard"))
+    # Abonnement expiré : on coupe les fonctionnalités premium (l'app reste utilisable).
+    if (request.endpoint in SUBSCRIPTION_LOCKED
+            and subscription_info(agent)["state"] == "expired"):
+        if request.path.startswith("/api/"):
+            return jsonify({"ok": False, "error": "abonnement_expire"}), 402
+        return render_template("abonnement_expire.html",
+                               sub=subscription_info(agent), agent=agent), 200
     return None
 
 
@@ -811,7 +827,8 @@ def dashboard():
     if r:
         return r
     state = compute_state()
-    return render_template("dashboard.html", s=state)
+    return render_template("dashboard.html", s=state,
+                           sub=subscription_info(state["agent"]))
 
 
 # ---------------------------------------------------------------------------

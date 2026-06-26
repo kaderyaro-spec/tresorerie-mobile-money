@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Abonnement expiré{% endblock %}
+{% block header %}Abonnement expiré{% endblock %}
+
+{% block content %}
+<section class="block card-form expired-card">
+    <div class="expired-ico">🔒</div>
+    <h2>Cette fonctionnalité est suspendue</h2>
+    <p class="hint">Votre abonnement {% if sub.until %}a expiré le <strong>{{ sub.until }}</strong>{% else %}a expiré{% endif %}.
+       La <strong>clôture</strong>, l'<strong>historique</strong>, les <strong>rapports</strong> et les
+       <strong>téléchargements</strong> sont temporairement suspendus.</p>
+    <p class="hint">✅ Vous pouvez toujours <strong>utiliser l'application</strong> au quotidien :
+       tableau de bord, nouvelles transactions, réapprovisionnement et carnet de dettes.</p>
+    <p class="hint">Pour réactiver toutes les fonctions, <strong>contactez votre gérant</strong>
+       afin de renouveler votre abonnement.</p>
+
+    <a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-block" style="margin-top:14px">Retour à l'accueil</a>
+</section>
+{% endblock %}

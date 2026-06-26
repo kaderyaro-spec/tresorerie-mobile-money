@@ -18,6 +18,10 @@
 </div>
 {% endif %}
 
+{% if sub and sub.state == 'expired' %}
+<div class="expired-bar">🔒 Abonnement expiré {% if sub.until %}le {{ sub.until }}{% endif %} — clôture, historique et rapports suspendus. Contactez votre gérant pour réactiver.</div>
+{% endif %}
+
 <div class="total-banner" id="solde-banner">
     <span class="total-label">Fond de roulement</span>
     <div class="total-value-row">

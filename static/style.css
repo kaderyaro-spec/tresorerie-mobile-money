@@ -373,6 +373,7 @@ input:focus, select:focus { outline: none; border-color: var(--green); }
 .admin-actions .btn, .admin-actions .btn-del { padding: 8px 12px; font-size: 14px; width: auto; }
 .admin-date-form { display: flex; gap: 6px; align-items: center; }
 .admin-date-form input[type=date] { width: auto; padding: 7px 9px; font-size: 14px; }
+.admin-del { background: var(--red); color: #fff; border: none; }
 .journal-link { display: block; text-decoration: none; color: inherit; }
 /* Journal : date a gauche, commission a droite, meme taille, ligne nette. */
 .journal-link .tx-main { align-items: center; gap: 10px; }

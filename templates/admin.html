@@ -50,6 +50,11 @@
                 <input type="hidden" name="action" value="reset">
                 <button type="submit" class="btn-del">Essai</button>
             </form>
+            <form method="post" action="{{ url_for('admin_delete') }}"
+                  onsubmit="return confirm('SUPPRIMER définitivement cet agent et TOUTES ses données (transactions, clôtures, dettes) ? Action IRRÉVERSIBLE.');">
+                <input type="hidden" name="agent_id" value="{{ r.a.id }}">
+                <button type="submit" class="btn-del admin-del">🗑 Supprimer</button>
+            </form>
         </div>
     </li>
     {% endfor %}

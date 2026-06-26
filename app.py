@@ -57,7 +57,7 @@ app.jinja_env.filters["phone"] = fmt_phone
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "35"
+ASSET_VERSION = "36"
 
 
 @app.context_processor
@@ -231,7 +231,7 @@ PUBLIC_ENDPOINTS = {
     "onboarding_otp", "onboarding_pin", "onboarding_operators", "onboarding_services",
     "recovery_request", "recovery_newpin",
     # Panneau gérant : protégé par sa propre clé (ADMIN_KEY), pas par la session agent.
-    "admin_login", "admin", "admin_sub", "admin_logout",
+    "admin_login", "admin", "admin_sub", "admin_delete", "admin_logout",
 }
 
 
@@ -473,6 +473,29 @@ def admin_sub():
     conn.commit()
     conn.close()
     flash("Abonnement mis à jour. ✓", "success")
+    return redirect(url_for("admin"))
+
+
+@app.route("/admin/supprimer", methods=["POST"])
+def admin_delete():
+    if not session.get("is_admin"):
+        return redirect(url_for("admin_login"))
+    aid = request.form.get("agent_id")
+    conn = db.get_db()
+    if not conn.execute("SELECT id FROM agent WHERE id=?", (aid,)).fetchone():
+        conn.close()
+        flash("Agent introuvable.", "error")
+        return redirect(url_for("admin"))
+    # Suppression des données liées AVANT l'agent (contraintes de clés étrangères).
+    conn.execute("DELETE FROM cloture_line WHERE cloture_id IN "
+                 "(SELECT id FROM cloture WHERE agent_id=?)", (aid,))
+    for table in ('"transaction"', "dette", "sms_inbox", "sms_device",
+                  "employee", "cloture", "wallet", "caisse"):
+        conn.execute(f"DELETE FROM {table} WHERE agent_id=?", (aid,))
+    conn.execute("DELETE FROM agent WHERE id=?", (aid,))
+    conn.commit()
+    conn.close()
+    flash("Agent et toutes ses données supprimés. ✓", "success")
     return redirect(url_for("admin"))
 
 

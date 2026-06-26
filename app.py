@@ -57,7 +57,7 @@ app.jinja_env.filters["phone"] = fmt_phone
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "36"
+ASSET_VERSION = "37"
 
 
 @app.context_processor
@@ -227,7 +227,7 @@ def require_onboarding():
 
 # Points d'entrée accessibles sans être connecté
 PUBLIC_ENDPOINTS = {
-    "login", "signup", "static", "index", "ping", "health", "api_sms", "conditions",
+    "login", "signup", "static", "index", "ping", "api_sms", "conditions",
     "onboarding_otp", "onboarding_pin", "onboarding_operators", "onboarding_services",
     "recovery_request", "recovery_newpin",
     # Panneau gérant : protégé par sa propre clé (ADMIN_KEY), pas par la session agent.
@@ -382,25 +382,6 @@ def require_login():
 def ping():
     """Sonde de disponibilité (utilisée pour garder le serveur éveillé)."""
     return "ok", 200
-
-
-@app.route("/health")
-def health():
-    """Diagnostic : moteur de base de données et persistance (sans données perso)."""
-    info = {
-        "backend": "postgresql" if db.USE_PG else "sqlite (ephemere !)",
-        "database_url_set": bool(db.DATABASE_URL),
-    }
-    try:
-        conn = db.get_db()
-        row = conn.execute("SELECT COUNT(*) AS n FROM agent").fetchone()
-        conn.close()
-        info["agents"] = row["n"]
-        info["db_ok"] = True
-    except Exception as e:  # pragma: no cover
-        info["db_ok"] = False
-        info["error"] = str(e)[:200]
-    return info, 200
 
 
 # ---------------------------------------------------------------------------

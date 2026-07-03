@@ -1,0 +1,22 @@
+name: Tests
+
+# Lance la suite de tests à chaque push et pull request sur main.
+# Objectif : ne jamais déployer une version qui casse la logique métier.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Installer les dépendances
+        run: pip install -r requirements-dev.txt
+      - name: Lancer les tests
+        run: pytest

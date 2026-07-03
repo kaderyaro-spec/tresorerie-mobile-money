@@ -87,7 +87,30 @@ class _Conn:
         self._raw.commit()
 
     def close(self):
-        self._raw.close()
+        # Idempotent : peut être appelée explicitement ET par le filet de
+        # sécurité de fin de requête sans provoquer d'erreur.
+        if getattr(self, "_closed", False):
+            return
+        self._closed = True
+        try:
+            self._raw.close()
+        except Exception:
+            pass
+
+
+def _register_for_teardown(conn):
+    """Enregistre la connexion pour fermeture automatique en fin de requête
+    (filet de sécurité : même si une route oublie/échoue, rien ne fuit)."""
+    try:
+        from flask import g, has_app_context
+        if has_app_context():
+            lst = getattr(g, "_db_conns", None)
+            if lst is None:
+                lst = []
+                g._db_conns = lst
+            lst.append(conn)
+    except Exception:
+        pass
 
 
 def get_db():
@@ -96,11 +119,14 @@ def get_db():
         # Désactive les requêtes préparées côté serveur : compatible avec le
         # « transaction pooler » de Supabase (sinon erreurs de prepared statements).
         raw.prepare_threshold = None
-        return _Conn(raw, pg=True)
-    raw = sqlite3.connect(DB_PATH)
-    raw.row_factory = sqlite3.Row
-    raw.execute("PRAGMA foreign_keys = ON")
-    return _Conn(raw, pg=False)
+        conn = _Conn(raw, pg=True)
+    else:
+        raw = sqlite3.connect(DB_PATH)
+        raw.row_factory = sqlite3.Row
+        raw.execute("PRAGMA foreign_keys = ON")
+        conn = _Conn(raw, pg=False)
+    _register_for_teardown(conn)
+    return conn
 
 
 def today_str():
@@ -156,6 +182,8 @@ CREATE TABLE IF NOT EXISTS "transaction" (
     amount       REAL NOT NULL,
     commission   REAL NOT NULL DEFAULT 0,
     deleted      INTEGER NOT NULL DEFAULT 0,
+    deleted_at   TEXT,                             -- date/heure d'annulation (NULL = active)
+    deleted_by   INTEGER,                          -- employé ayant annulé (NULL = gérant)
     client_uid   TEXT,                             -- id généré côté téléphone (sync hors-ligne)
     employee_id  INTEGER                           -- employé qui a saisi (NULL = gérant)
 );
@@ -228,6 +256,12 @@ CREATE TABLE IF NOT EXISTS cloture_line (
     commission REAL NOT NULL DEFAULT 0,  -- commissions du jour pour cet opérateur
     dette      REAL NOT NULL DEFAULT 0   -- dettes clients imputées à ce poste
 );
+
+CREATE TABLE IF NOT EXISTS throttle (
+    k            TEXT PRIMARY KEY,        -- ex. « login:0700000000 » ou « admin »
+    fails        INTEGER NOT NULL DEFAULT 0,
+    locked_until TEXT                     -- verrou jusqu'à (AAAA-MM-JJ HH:MM:SS) ; NULL = libre
+);
 """
 
 
@@ -274,6 +308,11 @@ def _migrate(conn):
         conn.execute("ALTER TABLE wallet ADD COLUMN label TEXT")
     if "wallet_id" not in conn.column_names("sms_device"):
         conn.execute("ALTER TABLE sms_device ADD COLUMN wallet_id INTEGER")
+    tcols2 = conn.column_names("transaction")
+    if "deleted_at" not in tcols2:
+        conn.execute('ALTER TABLE "transaction" ADD COLUMN deleted_at TEXT')
+    if "deleted_by" not in tcols2:
+        conn.execute('ALTER TABLE "transaction" ADD COLUMN deleted_by INTEGER')
 
 
 def init_db():
@@ -286,6 +325,21 @@ def init_db():
     _migrate(conn)
     conn.commit()
     conn.close()
+
+    # Contraintes d'unicité (dernier rempart). Best-effort : si des doublons
+    # historiques existent déjà, la création échoue → on l'ignore sans planter.
+    # Chaque instruction sur sa propre connexion (une erreur PG n'en pollue pas d'autres).
+    for sql in (
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_phone ON agent(phone)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_cloture_agent_date ON cloture(agent_id, date)",
+    ):
+        try:
+            c = get_db()
+            c.execute(sql)
+            c.commit()
+            c.close()
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------

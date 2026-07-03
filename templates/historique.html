@@ -32,7 +32,7 @@
 </div>
 <ul class="tx-list">
     {% for t in txs %}
-    <li class="tx-item">
+    <li class="tx-item {% if t.deleted %}tx-annulee{% endif %}">
         <div class="tx-main">
             <div class="tx-left">
                 {{ op_logo(t.operator, 32) if t.operator else '' }}
@@ -47,6 +47,7 @@
             <span>{{ t.created_at }}</span>
             {% if t.commission and t.commission > 0 %}<span>Comm. {{ t.commission | fcfa }}</span>{% endif %}
             {% if t.employee_name %}<span>✍ {{ t.employee_name }}</span>{% endif %}
+            {% if t.deleted %}<span class="tx-annulee-tag">🚫 annulée{% if t.deleted_by_name %} par {{ t.deleted_by_name }}{% endif %}{% if t.deleted_at %} · {{ t.deleted_at }}{% endif %}</span>{% endif %}
         </div>
     </li>
     {% endfor %}

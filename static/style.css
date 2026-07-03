@@ -379,6 +379,10 @@ input:focus, select:focus { outline: none; border-color: var(--green); }
 .journal-link .tx-main { align-items: center; gap: 10px; }
 .journal-link .tx-type { font-size: 16px; }
 .journal-link .tx-amount { font-size: 16px; white-space: nowrap; flex-shrink: 0; }
+/* Opération annulée (affichée barrée dans l'historique, pour la traçabilité) */
+.tx-annulee { opacity: .7; }
+.tx-annulee .tx-type, .tx-annulee .tx-amount { text-decoration: line-through; }
+.tx-annulee-tag { color: var(--red); font-weight: 700; }
 .tx-meta .neg { color: var(--red); font-weight: 700; }
 .tx-meta .pos { color: var(--green); font-weight: 700; }
 .journal-dette { color: #9a5b00; font-weight: 700; }

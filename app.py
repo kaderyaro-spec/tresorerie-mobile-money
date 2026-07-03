@@ -22,12 +22,34 @@ app.secret_key = os.environ.get("SECRET_KEY", "mvp-tresorerie-mobile-money-dev")
 from datetime import timedelta
 app.permanent_session_lifetime = timedelta(days=30)
 
+# Sécurité des cookies de session. SameSite=Lax bloque les envois de cookie sur
+# les POST venant d'un autre site (protection CSRF de fait) ; Secure impose le
+# HTTPS en production (présence de DATABASE_URL) ; HttpOnly les rend inaccessibles
+# au JavaScript (anti-vol de session par XSS).
+_IN_PROD = bool(os.environ.get("DATABASE_URL"))
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=_IN_PROD,
+)
+
 
 # ---------------------------------------------------------------------------
 # Initialisation
 # ---------------------------------------------------------------------------
 with app.app_context():
     db.init_db()
+
+
+@app.teardown_appcontext
+def _close_db_conns(exc):
+    """Filet de sécurité : ferme toute connexion restée ouverte en fin de requête."""
+    try:
+        from flask import g
+        for c in getattr(g, "_db_conns", []) or []:
+            c.close()
+    except Exception:
+        pass
 
 
 def fmt(montant):
@@ -57,7 +79,7 @@ app.jinja_env.filters["phone"] = fmt_phone
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "37"
+ASSET_VERSION = "38"
 
 
 @app.context_processor
@@ -337,6 +359,73 @@ def subscription_info(agent):
 # via la variable d'environnement ADMIN_KEY (secret). Repli pour le développement.
 ADMIN_KEY = os.environ.get("ADMIN_KEY", "tresorier-admin-2026")
 
+# Alerte (sans planter) si des secrets de repli sont utilisés en production.
+if _IN_PROD:
+    import sys as _sys
+    if app.secret_key == "mvp-tresorerie-mobile-money-dev":
+        print("[SECURITE] SECRET_KEY par défaut en production — à définir dans Render.",
+              file=_sys.stderr)
+    if ADMIN_KEY == "tresorier-admin-2026":
+        print("[SECURITE] ADMIN_KEY par défaut en production — à définir dans Render.",
+              file=_sys.stderr)
+
+
+# ---------------------------------------------------------------------------
+# Anti-force-brute : verrouillage progressif après plusieurs échecs (login,
+# panneau gérant, récupération). Compteur stocké en base → survit aux
+# redémarrages et fonctionne même avec plusieurs processus serveur.
+# ---------------------------------------------------------------------------
+LOCK_THRESHOLD = 5      # nombre d'échecs avant blocage
+LOCK_MINUTES = 15       # durée du blocage
+
+
+def _throttle_check(key):
+    """Renvoie le nombre de minutes de blocage restantes, ou None si l'accès est libre."""
+    from datetime import datetime
+    conn = db.get_db()
+    row = conn.execute("SELECT locked_until FROM throttle WHERE k=?", (key,)).fetchone()
+    if row and row["locked_until"]:
+        try:
+            lu = datetime.strptime(row["locked_until"], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            lu = None
+        if lu and datetime.now() < lu:
+            conn.close()
+            return int((lu - datetime.now()).total_seconds() // 60) + 1
+        # Verrou expiré → on repart de zéro.
+        conn.execute("DELETE FROM throttle WHERE k=?", (key,))
+        conn.commit()
+    conn.close()
+    return None
+
+
+def _throttle_fail(key):
+    """Enregistre un échec ; verrouille si le seuil est atteint."""
+    from datetime import datetime, timedelta
+    conn = db.get_db()
+    row = conn.execute("SELECT fails FROM throttle WHERE k=?", (key,)).fetchone()
+    fails = (row["fails"] if row else 0) + 1
+    locked_until = None
+    if fails >= LOCK_THRESHOLD:
+        locked_until = (datetime.now() + timedelta(minutes=LOCK_MINUTES)
+                        ).strftime("%Y-%m-%d %H:%M:%S")
+    if row:
+        conn.execute("UPDATE throttle SET fails=?, locked_until=? WHERE k=?",
+                     (fails, locked_until, key))
+    else:
+        conn.execute("INSERT INTO throttle (k, fails, locked_until) VALUES (?,?,?)",
+                     (key, fails, locked_until))
+    conn.commit()
+    conn.close()
+
+
+def _throttle_reset(key):
+    """Efface le compteur (après un succès)."""
+    conn = db.get_db()
+    conn.execute("DELETE FROM throttle WHERE k=?", (key,))
+    conn.commit()
+    conn.close()
+
 
 # Écrans réservés au gérant (un employé connecté n'y accède pas)
 GERANT_ONLY = {"parametres", "rapport", "export_csv", "export_pdf"}
@@ -390,9 +479,16 @@ def ping():
 @app.route("/admin/connexion", methods=["GET", "POST"])
 def admin_login():
     if request.method == "POST":
-        if ADMIN_KEY and request.form.get("key", "") == ADMIN_KEY:
+        import hmac
+        wait = _throttle_check("admin")
+        if wait:
+            flash(f"Trop d'essais. Réessayez dans {wait} minute(s).", "error")
+            return redirect(url_for("admin_login"))
+        if ADMIN_KEY and hmac.compare_digest(request.form.get("key", ""), ADMIN_KEY):
+            _throttle_reset("admin")
             session["is_admin"] = True
             return redirect(url_for("admin"))
+        _throttle_fail("admin")
         flash("Clé administrateur incorrecte.", "error")
         return redirect(url_for("admin_login"))
     return render_template("admin_login.html")
@@ -445,7 +541,15 @@ def admin_sub():
     elif action == "plus_an":
         new_until = (base + timedelta(days=365)).strftime("%Y-%m-%d")
     elif action == "date":
-        new_until = (request.form.get("date", "").strip() or None)
+        raw = request.form.get("date", "").strip()
+        if raw:
+            try:
+                datetime.strptime(raw, "%Y-%m-%d")   # valide le format AAAA-MM-JJ
+                new_until = raw
+            except ValueError:
+                conn.close()
+                flash("Date invalide (format attendu : AAAA-MM-JJ).", "error")
+                return redirect(url_for("admin"))
     elif action == "reset":
         new_until = None
     status = "Abonné" if new_until else "Essai gratuit"
@@ -506,10 +610,16 @@ def login():
     if request.method == "POST":
         phone = normalize_phone(request.form.get("phone", ""))
         pin = request.form.get("pin", "").strip()
+        key = "login:" + (phone or "?")
+        wait = _throttle_check(key)
+        if wait:
+            flash(f"Trop d'essais. Réessayez dans {wait} minute(s).", "error")
+            return redirect(url_for("login"))
         agent = db.get_agent_by_phone(phone)
         if agent and pin:
             # 1) PIN du gérant ?
             if agent["pin_hash"] and check_password_hash(agent["pin_hash"], pin):
+                _throttle_reset(key)
                 session.clear()
                 session.permanent = True
                 session["agent_id"] = agent["id"]
@@ -523,6 +633,7 @@ def login():
             conn.close()
             for emp in emps:
                 if check_password_hash(emp["pin_hash"], pin):
+                    _throttle_reset(key)
                     session.clear()
                     session.permanent = True
                     session["agent_id"] = agent["id"]
@@ -530,6 +641,7 @@ def login():
                     session["employee_id"] = emp["id"]
                     session["employee_name"] = emp["name"]
                     return redirect(url_for("dashboard"))
+        _throttle_fail(key)
         flash("Numéro ou code incorrect.", "error")
         return redirect(url_for("login"))
 
@@ -552,12 +664,19 @@ def recovery_request():
         code = request.form.get("code", "").strip().upper().replace(" ", "")
         if "-" not in code and len(code) == 8:
             code = f"{code[:4]}-{code[4:]}"
+        key = "recovery:" + (phone or "?")
+        wait = _throttle_check(key)
+        if wait:
+            flash(f"Trop d'essais. Réessayez dans {wait} minute(s).", "error")
+            return redirect(url_for("recovery_request"))
         agent = db.get_agent_by_phone(phone)
         if (agent and agent["recovery_hash"]
                 and check_password_hash(agent["recovery_hash"], code)):
+            _throttle_reset(key)
             session.clear()
             session["reset_agent_id"] = agent["id"]
             return redirect(url_for("recovery_newpin"))
+        _throttle_fail(key)
         flash("Numéro ou code de récupération incorrect.", "error")
         return redirect(url_for("recovery_request"))
     return render_template("recovery.html")
@@ -1348,6 +1467,11 @@ def dettes():
             flash("Précisez la nature de la dette (dépôt, retrait, retrait caisse).", "error")
         elif op_type in ("depot_client", "retrait_client") and not wallet_id:
             flash("Sélectionnez le portefeuille (UV) concerné.", "error")
+        elif wallet_id and not conn.execute(
+                "SELECT id FROM wallet WHERE id=? AND agent_id=? AND active=1",
+                (wallet_id, aid)).fetchone():
+            # Le portefeuille doit appartenir au compte connecté (anti-falsification).
+            flash("Portefeuille invalide.", "error")
         else:
             conn.execute(
                 "INSERT INTO dette (agent_id, client_name, client_phone, amount, note, "
@@ -1390,28 +1514,45 @@ def dette_regler(dette_id):
         conn.close()
         flash("Dette introuvable ou déjà réglée.", "error")
         return redirect(url_for("dettes"))
+    montant = d["amount"]
+    accounted = d["accounted"]
+    wallet_id = d["wallet_id"]
+    conn.close()
+
+    # On enregistre d'ABORD les mouvements ; on ne marque « réglée » que s'ils
+    # ont réussi (évite une dette réglée sans encaissement effectif).
+    err = None
+    msg = f"Dette réglée : {fmt(montant)} FCFA de retour en caisse. ✓"
+    if accounted:
+        # Déjà imputée à une clôture (diminution du poste déjà dans l'ouverture) :
+        # le remboursement est un simple encaissement.
+        _, err = _save_operation(tx_type="depot_caisse", wallet_id=None, amount=montant)
+        msg = f"Dette réglée : {fmt(montant)} FCFA encaissés en caisse. ✓"
+    elif wallet_id:
+        # Dette opérateur non imputée : l'UV sort définitivement (le solde
+        # opérateur reste diminué) et le remboursement entre en caisse.
+        conn2 = db.get_db()
+        wallet_ok = conn2.execute(
+            "SELECT id FROM wallet WHERE id=? AND agent_id=?", (wallet_id, aid)).fetchone()
+        conn2.close()
+        e1 = None
+        if wallet_ok:
+            _, e1 = _save_operation(tx_type="sortie_uv_dette", wallet_id=wallet_id, amount=montant)
+        _, e2 = _save_operation(tx_type="depot_caisse", wallet_id=None, amount=montant)
+        err = e1 or e2
+        msg = (f"Dette réglée : {fmt(montant)} FCFA encaissés en caisse "
+               f"(le solde opérateur reste diminué). ✓")
+    # (dette caisse non imputée : aucun mouvement — la déduction affichée disparaît)
+
+    if err:
+        flash(f"Mouvement non enregistré ({err}). La dette reste en cours.", "error")
+        return redirect(url_for("dettes"))
+
+    conn = db.get_db()
     conn.execute("UPDATE dette SET settled_at=? WHERE id=?", (db.now_str(), dette_id))
     conn.commit()
     conn.close()
-
-    montant = d["amount"]
-    if d["accounted"]:
-        # Dette déjà imputée à une clôture : la diminution du poste est déjà dans
-        # le solde d'ouverture. Le remboursement est un simple encaissement.
-        _save_operation(tx_type="depot_caisse", wallet_id=None, amount=montant)
-        flash(f"Dette réglée : {fmt(montant)} FCFA encaissés en caisse. ✓", "success")
-    elif d["wallet_id"]:
-        # Dette opérateur (non imputée) : l'UV avancée sort définitivement (le
-        # solde de l'opérateur reste diminué, il ne remonte pas) et le
-        # remboursement entre en caisse → caisse et fond de roulement augmentent.
-        _save_operation(tx_type="sortie_uv_dette", wallet_id=d["wallet_id"], amount=montant)
-        _save_operation(tx_type="depot_caisse", wallet_id=None, amount=montant)
-        flash(f"Dette réglée : {fmt(montant)} FCFA encaissés en caisse "
-              f"(le solde opérateur reste diminué). ✓", "success")
-    else:
-        # Dette caisse (non imputée) : l'argent avancé depuis la caisse y revient
-        # simplement (la déduction affichée disparaît) → aucun mouvement à créer.
-        flash(f"Dette réglée : {fmt(montant)} FCFA de retour en caisse. ✓", "success")
+    flash(msg, "success")
     return redirect(url_for("dettes"))
 
 
@@ -1429,14 +1570,18 @@ def dette_delete(dette_id):
 # ---------------------------------------------------------------------------
 # 4.6 — Historique (+ exports CSV / PDF)
 # ---------------------------------------------------------------------------
-def _filtered_transactions(conn, agent_id, f_jour, f_wallet, f_type):
-    """Transactions du compte, filtrées comme sur l'écran Historique."""
+def _filtered_transactions(conn, agent_id, f_jour, f_wallet, f_type, include_deleted=False):
+    """Transactions du compte, filtrées comme sur l'écran Historique.
+    include_deleted=True : inclut les opérations annulées (affichées barrées)."""
     query = ('SELECT t.*, w.operator AS operator, w.label AS wallet_label, '
-             '       e.name AS employee_name FROM "transaction" t '
+             '       e.name AS employee_name, de.name AS deleted_by_name FROM "transaction" t '
              "LEFT JOIN wallet w ON t.wallet_id = w.id "
              "LEFT JOIN employee e ON t.employee_id = e.id "
-             "WHERE t.agent_id=? AND t.deleted=0")
+             "LEFT JOIN employee de ON t.deleted_by = de.id "
+             "WHERE t.agent_id=?")
     params = [agent_id]
+    if not include_deleted:
+        query += " AND t.deleted=0"
     if f_jour:
         query += " AND t.business_day=?"
         params.append(f_jour)
@@ -1462,7 +1607,8 @@ def historique():
         "SELECT * FROM wallet WHERE agent_id=? ORDER BY id", (agent["id"],)
     ).fetchall()
 
-    txs = _filtered_transactions(conn, agent["id"], f_jour, f_wallet, f_type)
+    txs = _filtered_transactions(conn, agent["id"], f_jour, f_wallet, f_type,
+                                 include_deleted=True)
     jours = conn.execute(
         'SELECT DISTINCT business_day FROM "transaction" '
         "WHERE agent_id=? ORDER BY business_day DESC", (agent["id"],)
@@ -1478,10 +1624,26 @@ def historique():
 
 @app.route("/transaction/<int:tx_id>/delete", methods=["POST"])
 def delete_transaction(tx_id):
-    """Suppression douce d'une transaction (annulation rapide ou correction)."""
+    """Annulation (suppression douce) d'une opération de la JOURNÉE EN COURS.
+    Tracée (date + auteur) et affichée barrée dans l'historique : une opération
+    d'une journée déjà clôturée ne peut plus être effacée en douce (anti-fraude)."""
     conn = db.get_db()
-    conn.execute('UPDATE "transaction" SET deleted=1 WHERE id=? AND agent_id=?',
-                 (tx_id, session["agent_id"]))
+    aid = session["agent_id"]
+    agent = conn.execute("SELECT business_day FROM agent WHERE id=?", (aid,)).fetchone()
+    tx = conn.execute('SELECT business_day, deleted FROM "transaction" '
+                      "WHERE id=? AND agent_id=?", (tx_id, aid)).fetchone()
+    if not tx or tx["deleted"]:
+        conn.close()
+        flash("Opération introuvable ou déjà annulée.", "error")
+        return redirect(url_for("historique"))
+    if tx["business_day"] != agent["business_day"]:
+        conn.close()
+        flash("Seules les opérations de la journée en cours peuvent être annulées. "
+              "Pour une journée déjà clôturée, l'écart se corrige à la clôture.", "error")
+        return redirect(url_for("historique"))
+    conn.execute('UPDATE "transaction" SET deleted=1, deleted_at=?, deleted_by=? '
+                 "WHERE id=? AND agent_id=?",
+                 (db.now_str(), session.get("employee_id"), tx_id, aid))
     conn.commit()
     conn.close()
     flash("Opération annulée. Les soldes ont été recalculés.", "success")
@@ -1779,8 +1941,11 @@ def parametres():
         if action == "account":
             shop_name = request.form.get("shop_name", "").strip()
             phone = normalize_phone(request.form.get("phone", ""))
-            if not phone:
-                flash("Le numéro de téléphone est obligatoire.", "error")
+            other = db.get_agent_by_phone(phone)
+            if not valid_ci_phone(phone):
+                flash("Le numéro de téléphone doit comporter 10 chiffres.", "error")
+            elif other and other["id"] != agent["id"]:
+                flash("Ce numéro est déjà utilisé par un autre compte.", "error")
             else:
                 conn.execute("UPDATE agent SET shop_name=?, phone=? WHERE id=?",
                              (shop_name, phone, agent["id"]))

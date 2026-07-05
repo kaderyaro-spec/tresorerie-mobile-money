@@ -79,7 +79,7 @@ app.jinja_env.filters["phone"] = fmt_phone
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "38"
+ASSET_VERSION = "39"
 
 
 @app.context_processor
@@ -331,7 +331,7 @@ def _start_otp(phone):
         "exp": (datetime.now() + timedelta(minutes=10)).strftime("%Y-%m-%d %H:%M:%S"),
         "tries": 0,
     }
-    send_sms(phone, f"Trésorerie Mobile Money : votre code de vérification est {code}. "
+    send_sms(phone, f"Warri : votre code de vérification est {code}. "
                     "Il expire dans 10 minutes.")
     session["otp_demo"] = code if otp_demo_mode() else None
 
@@ -1389,7 +1389,7 @@ def cloture_recap(cloture_id):
         txt.append("")
         txt.append(f"📓 Dettes clients en cours : {fmt(dettes_total)} F")
     txt.append("")
-    txt.append("— Généré par Trésorerie Mobile Money")
+    txt.append("— Généré par Warri")
 
     from urllib.parse import quote
     wa_text = quote("\n".join(txt))
@@ -1837,7 +1837,7 @@ def rapport():
     boutique = f" — {agent['shop_name']}" if agent["shop_name"] else ""
     pdf.cell(0, 6, lat(f"Point marchand : {titulaire}{boutique} ({agent['phone']})"),
              new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(0, 6, lat(f"Édité le {db.now_str()} par Trésorerie Mobile Money"),
+    pdf.cell(0, 6, lat(f"Édité le {db.now_str()} par Warri"),
              new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
 
@@ -1911,8 +1911,8 @@ def rapport():
     pdf.set_text_color(120, 120, 120)
     pdf.multi_cell(0, 5, lat(
         "Document généré automatiquement à partir des opérations enregistrées par "
-        "l'agent dans l'application Trésorerie Mobile Money. Les commissions des "
-        "opérateurs à grille connue (Wave) sont estimées selon la grille officielle ; "
+        "l'agent dans l'application Warri. Les commissions des opérateurs à grille "
+        "connue (Wave, Orange Money, MTN) sont estimées selon la grille officielle ; "
         "les autres selon les saisies de l'agent."))
 
     filename = f"rapport_{mois}.pdf"

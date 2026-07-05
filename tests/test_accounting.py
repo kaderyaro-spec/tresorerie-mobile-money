@@ -96,6 +96,21 @@ def test_no_duplicate_cloture_same_date(agent):
     assert n == 1
 
 
+def test_orange_commission_grid(client):
+    """Cumul Orange Money 100 000-199 999 -> palier RÉEL 837 F (grille journalière)."""
+    from conftest import make_agent, first_wallet_id
+    make_agent(client, operators="Orange Money", solde="500000", cash="50000")
+    wid = first_wallet_id()
+    client.post("/transaction", data={"type": "depot_client", "wallet_id": str(wid),
+                                      "amount": "150000"})
+    client.post("/cloture", data={})
+    conn = db.get_db()
+    comm = conn.execute("SELECT COALESCE(SUM(commission),0) AS c "
+                        "FROM cloture_line").fetchone()["c"]
+    conn.close()
+    assert abs(comm - 837) < 1
+
+
 def test_wave_commission_grid(agent):
     """Cumul Wave 10 000-99 995 -> palier 275 F (grille journalière)."""
     wid = first_wallet_id()

@@ -250,13 +250,49 @@ def wave_volume(transactions) -> float:
     return total
 
 
+# Grille Orange Money (indépendants, Côte d'Ivoire). MÊME MODÈLE que Wave :
+# commission journalière selon le CUMUL des transactions (CI + CO = dépôts +
+# retraits) de la journée. Colonne « RÉEL » (commission réellement perçue).
+# (palier_inférieur, palier_supérieur, commission_jour)
+ORANGE_COMMISSION_GRID = [
+    (500,          9_999,         17),
+    (10_000,       19_999,        52),
+    (20_000,       49_999,        122),
+    (50_000,       74_999,        221),
+    (75_000,       99_999,        306),
+    (100_000,      199_999,       837),
+    (200_000,      299_999,       1_391),
+    (300_000,      399_999,       2_160),
+    (400_000,      599_999,       2_250),
+    (600_000,      799_999,       2_925),
+    (800_000,      999_999,       3_060),
+    (1_000_000,    1_499_999,     3_915),
+    (1_500_000,    1_999_999,     4_725),
+    (2_000_000,    2_499_999,     5_850),
+    (2_500_000,    2_999_999,     6_210),
+    (3_000_000,    3_499_999,     7_200),
+    (3_500_000,    3_999_999,     7_200),
+    (4_000_000,    4_499_999,     8_100),
+    (4_500_000,    4_999_999,     9_090),
+    (5_000_000,    5_999_999,     10_170),
+    (6_000_000,    6_999_999,     11_700),
+    (7_000_000,    7_999_999,     13_230),
+    (8_000_000,    9_999_999,     14_760),
+    (10_000_000,   14_999_999,    27_000),
+    (15_000_000,   19_999_999,    31_500),
+    (20_000_000,   24_999_999,    36_900),
+    (25_000_000,   None,          55_800),  # 25 000 000F et plus (illimité)
+]
+
+
 # ---------------------------------------------------------------------------
 # Grilles de commissions par opérateur, avec leur MODÈLE de calcul :
-#   "daily"  : commission journalière selon le CUMUL dépôts+retraits du jour (Wave)
+#   "daily"  : commission journalière selon le CUMUL dépôts+retraits du jour
 #   "per_tx" : commission PAR TRANSACTION selon le montant de l'opération (MTN)
 # ---------------------------------------------------------------------------
 COMMISSION_MODELS = {
     "Wave": ("daily", WAVE_COMMISSION_GRID),
+    "Orange Money": ("daily", ORANGE_COMMISSION_GRID),
     "MTN":  ("per_tx", MTN_COMMISSION_GRID),
 }
 # Conservé pour compatibilité (présence d'une grille connue)

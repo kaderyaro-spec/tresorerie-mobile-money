@@ -431,6 +431,10 @@ input:focus, select:focus { outline: none; border-color: var(--green); }
     display: flex; align-items: center; justify-content: center;
     box-shadow: 0 6px 18px rgba(13,110,92,.32);
 }
+.auth-logo-img {
+    display: block; margin: 8px auto 16px; width: auto; height: 96px; max-width: 80%;
+    object-fit: contain; border-radius: 18px;
+}
 .auth-title { font-size: 26px; font-weight: 800; text-align: center; margin: 0 0 6px; }
 .auth-sub { text-align: center; color: var(--muted); margin: 0 0 24px; font-size: 15px; }
 .auth-form {

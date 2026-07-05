@@ -79,12 +79,16 @@ app.jinja_env.filters["phone"] = fmt_phone
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "39"
+ASSET_VERSION = "40"
+
+# Numéro de support affiché aux agents (fiche, page « abonnement expiré », légal).
+# Provisoire : réglable via la variable d'environnement SUPPORT_PHONE.
+SUPPORT_PHONE = os.environ.get("SUPPORT_PHONE", "+225 07 77 19 01 41")
 
 
 @app.context_processor
 def _inject_asset_version():
-    return {"asset_v": ASSET_VERSION}
+    return {"asset_v": ASSET_VERSION, "support_phone": SUPPORT_PHONE}
 
 
 # Identité visuelle de chaque opérateur : pastille colorée + initiales.

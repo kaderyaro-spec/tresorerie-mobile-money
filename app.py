@@ -79,7 +79,7 @@ app.jinja_env.filters["phone"] = fmt_phone
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "40"
+ASSET_VERSION = "41"
 
 # Numéro de support affiché aux agents (fiche, page « abonnement expiré », légal).
 # Provisoire : réglable via la variable d'environnement SUPPORT_PHONE.
@@ -733,6 +733,9 @@ def signup():
 
         if not nom or not prenom:
             flash("Le nom et le prénom sont obligatoires.", "error")
+            return redirect(url_for("signup"))
+        if len(cni) < 5:
+            flash("Le numéro de pièce d'identité (CNI) est obligatoire.", "error")
             return redirect(url_for("signup"))
         if not valid_ci_phone(phone):
             flash("Le numéro de téléphone doit comporter 10 chiffres.", "error")

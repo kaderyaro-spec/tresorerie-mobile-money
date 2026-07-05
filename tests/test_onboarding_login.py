@@ -5,7 +5,7 @@ from conftest import make_agent, otp_code
 
 def test_signup_creates_account_at_pin_step(client):
     """Le compte doit exister dès la validation du PIN (avant opérateurs/services)."""
-    client.post("/signup", data={"nom": "A", "prenom": "B", "cni": "1",
+    client.post("/signup", data={"nom": "A", "prenom": "B", "cni": "CI001234",
                                  "phone": "0700000001", "accept": "1"})
     client.post("/inscription/verification", data={"code": otp_code(client)})
     client.post("/inscription/pin", data={"pin": "1234", "pin2": "1234"})
@@ -17,7 +17,7 @@ def test_signup_creates_account_at_pin_step(client):
 
 def test_login_after_pin_only(client):
     """Numéro + PIN suffisent pour se connecter, même sans finir l'inscription."""
-    client.post("/signup", data={"nom": "A", "prenom": "B", "cni": "1",
+    client.post("/signup", data={"nom": "A", "prenom": "B", "cni": "CI001234",
                                  "phone": "0700000001", "accept": "1"})
     client.post("/inscription/verification", data={"code": otp_code(client)})
     client.post("/inscription/pin", data={"pin": "1234", "pin2": "1234"})
@@ -39,6 +39,15 @@ def test_full_onboarding_creates_wallet_and_caisse(agent):
     nc = conn.execute("SELECT COUNT(*) AS n FROM caisse WHERE agent_id=1").fetchone()["n"]
     conn.close()
     assert nw == 1 and nc == 1
+
+
+def test_cni_is_required(client):
+    """Sans CNI (ou trop courte), l'inscription est refusée avant tout."""
+    client.post("/signup", data={"nom": "A", "prenom": "B", "cni": "",
+                                 "phone": "0700000001", "accept": "1"})
+    # Pas d'OTP démarré → la page de vérification renvoie vers /signup
+    r = client.get("/inscription/verification")
+    assert r.status_code == 302 and r.headers["Location"].endswith("/signup")
 
 
 def test_phone_with_spaces_is_normalised(client):

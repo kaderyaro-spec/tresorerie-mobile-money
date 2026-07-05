@@ -18,7 +18,8 @@
         <input type="text" name="prenom" placeholder="Votre prénom" required>
 
         <label class="lbl-mt">Numéro CNI</label>
-        <input type="text" name="cni" inputmode="numeric" placeholder="Numéro de votre pièce d'identité">
+        <input type="text" name="cni" placeholder="Numéro de votre pièce d'identité"
+               minlength="5" required>
 
         <label class="lbl-mt">Numéro de téléphone</label>
         {{ phone_field() }}

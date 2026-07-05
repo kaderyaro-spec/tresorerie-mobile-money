@@ -41,7 +41,7 @@ def otp_code(c):
 def make_agent(c, phone="0700000001", pin="1234", operators="Wave",
                solde="100000", seuil="0", cash="50000"):
     """Déroule l'inscription complète d'un agent et le laisse connecté."""
-    c.post("/signup", data={"nom": "Test", "prenom": "Agent", "cni": "1",
+    c.post("/signup", data={"nom": "Test", "prenom": "Agent", "cni": "CI001234",
                             "phone": phone, "accept": "1"})
     c.post("/inscription/verification", data={"code": otp_code(c)})
     c.post("/inscription/pin", data={"pin": pin, "pin2": pin})

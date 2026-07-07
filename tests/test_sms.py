@@ -30,6 +30,25 @@ def test_orange_retrait():
     assert r["ref"] == "CO260704.2105.D71855"
 
 
+def test_orange_detecte_par_shortcode_454():
+    """Le SMS ne contient pas le mot « Orange » ; l'expéditeur « +454 » suffit."""
+    r = logic.parse_sms(
+        "Le depot vers le 0700000000 est reussi. Montant 1200.00 F, "
+        "Frais 0.00 F, Commission 0.00 F, ID Transaction: CI260705.1634.A79483, "
+        "Nouveau Solde 20015.00 F.",
+        sender="+454", known_operators=OPS)
+    assert r["operator"] == "Orange Money"
+    assert r["type"] == "depot_client"
+    assert r["amount"] == 1200
+
+
+def test_shortcode_ne_matche_pas_le_corps():
+    """« 454 » présent dans le CORPS (pas l'expéditeur) ne doit PAS router Orange."""
+    r = logic.parse_sms("Depot de 454000 F reussi.", sender="12345",
+                        known_operators=["MTN", "Moov Money"])
+    assert r["operator"] is None
+
+
 def test_orange_alerte_non_transaction_ignoree():
     """Un message d'alerte (pas une opération) ne doit RIEN pré-remplir."""
     r = _parse("Attention Vigilance Arnaque . Nouveau Solde 135715.00 F "

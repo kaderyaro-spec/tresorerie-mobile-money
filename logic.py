@@ -344,6 +344,13 @@ _OP_KEYWORDS = {
     "Factures": ["facture"],
 }
 
+# Numéros courts d'expéditeur (short-codes). Testés UNIQUEMENT contre le champ
+# expéditeur du SMS (jamais le corps) pour éviter les faux positifs — un SMS
+# Orange Money en Côte d'Ivoire est envoyé depuis « +454 ».
+_SENDER_SHORTCODES = {
+    "Orange Money": ["454"],
+}
+
 
 def _sms_amount(token):
     """Convertit « 300000.00 », « 30 000 », « 10300.00 » → entier en F."""
@@ -386,7 +393,8 @@ def parse_sms(body, sender="", known_operators=None):
             if amount:
                 break
 
-    # Opérateur : d'abord via l'expéditeur, puis le corps
+    # Opérateur : d'abord par mot-clé (expéditeur + corps), sinon par short-code
+    # de l'expéditeur seul (ex. « +454 » = Orange Money).
     operator = None
     for op in (known_operators or []):
         for kw in _OP_KEYWORDS.get(op, [op.split()[0].lower()]):
@@ -395,6 +403,12 @@ def parse_sms(body, sender="", known_operators=None):
                 break
         if operator:
             break
+    if operator is None:
+        sender_low = str(sender).lower()
+        for op in (known_operators or []):
+            if any(code in sender_low for code in _SENDER_SHORTCODES.get(op, [])):
+                operator = op
+                break
 
     # Sens de l'opération (pour un AGENT : « envoyé/dépôt » = dépôt client ;
     # « retrait » = retrait client)

@@ -344,11 +344,12 @@ _OP_KEYWORDS = {
     "Factures": ["facture"],
 }
 
-# Numéros courts d'expéditeur (short-codes). Testés UNIQUEMENT contre le champ
-# expéditeur du SMS (jamais le corps) pour éviter les faux positifs — un SMS
-# Orange Money en Côte d'Ivoire est envoyé depuis « +454 ».
-_SENDER_SHORTCODES = {
+# Indices d'expéditeur (short-code numérique OU nom d'émetteur). Testés
+# UNIQUEMENT contre le champ expéditeur du SMS (jamais le corps) pour éviter les
+# faux positifs. Côte d'Ivoire : Orange Money = « +454 », MTN = « MobileMoney ».
+_SENDER_HINTS = {
     "Orange Money": ["454"],
+    "MTN": ["mobilemoney", "mobile money"],
 }
 
 
@@ -406,7 +407,7 @@ def parse_sms(body, sender="", known_operators=None):
     if operator is None:
         sender_low = str(sender).lower()
         for op in (known_operators or []):
-            if any(code in sender_low for code in _SENDER_SHORTCODES.get(op, [])):
+            if any(hint in sender_low for hint in _SENDER_HINTS.get(op, [])):
                 operator = op
                 break
 

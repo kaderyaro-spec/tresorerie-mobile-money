@@ -56,3 +56,37 @@ def test_orange_alerte_non_transaction_ignoree():
     assert r["type"] is None
     assert r["amount"] is None
     assert r["ref"] is None
+
+
+# --- MTN (formats réels Côte d'Ivoire, expéditeur « MobileMoney ») ---
+
+def _mtn(body):
+    return logic.parse_sms(body, sender="MobileMoney", known_operators=OPS)
+
+
+def test_mtn_depot():
+    r = _mtn("Vous avez envoye 2100 FCFA au 2250000000000 le 06-07-2026 21:22:44. "
+             "Votre nouveau solde est de: 631718 FCFA. ID Transaction: 17216026013.")
+    assert r["operator"] == "MTN"            # expéditeur « MobileMoney » -> MTN
+    assert r["type"] == "depot_client"
+    assert r["amount"] == 2100               # pas le « nouveau solde » 631718
+    assert r["ref"] == "17216026013"
+
+
+def test_mtn_retrait():
+    r = _mtn("Le retrait initie le 06-07-2026 13:00:35 a ete effectue. Vous pouvez "
+             "payer le montant: 2000 FCFA en especes au 2250000000000. Votre nouveau "
+             "solde est de: 525958 FCFA. Frais: 0 FCFA. ID Transaction: 17210241818.")
+    assert r["operator"] == "MTN"
+    assert r["type"] == "retrait_client"
+    assert r["amount"] == 2000               # ni le solde, ni les frais
+    assert r["ref"] == "17210241818"
+
+
+def test_mtn_sans_id_reste_en_attente():
+    """Un SMS MTN sans ID Transaction est lu mais SANS référence -> confirmation."""
+    r = _mtn("Le retrait initie 2026-07-06 13:00:35 a ete effectue. Vous pouvez "
+             "payer le montant: 2000 FCFA en especes au 2250000000000.")
+    assert r["operator"] == "MTN" and r["type"] == "retrait_client"
+    assert r["amount"] == 2000
+    assert r["ref"] is None                  # pas d'auto-création sans référence

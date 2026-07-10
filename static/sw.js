@@ -2,7 +2,7 @@
 // Réseau d'abord avec délai maxi de 4 s : si le réseau ne répond pas à temps
 // (hors-ligne, réseau lent, serveur endormi), on sert la dernière version en
 // cache pour que l'application reste utilisable.
-const CACHE = "tresorerie-v44";
+const CACHE = "tresorerie-v45";
 
 self.addEventListener("install", (e) => {
   self.skipWaiting();

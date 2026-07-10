@@ -79,7 +79,7 @@ app.jinja_env.filters["phone"] = fmt_phone
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "44"
+ASSET_VERSION = "45"
 
 # Numéro de support affiché aux agents (fiche, page « abonnement expiré », légal).
 # Provisoire : réglable via la variable d'environnement SUPPORT_PHONE.

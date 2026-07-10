@@ -252,5 +252,32 @@ document.querySelectorAll('.copy-url').forEach(function (btn) {
         this.textContent = '✓ Copié !';
     });
 });
+
+// Application Warri Android : lecture des SMS INTÉGRÉE (sans app tierce).
+// Un bouton « Activer sur ce téléphone » relie l'appareil en un tap.
+(function () {
+    var bridge = window.WarriAndroid;
+    if (!bridge || !bridge.isWarriApp) return;
+    document.querySelectorAll('.device-item').forEach(function (item) {
+        var box = item.querySelector('.device-url');
+        if (!box) return;
+        var url = (box.dataset.url || box.textContent).trim();
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-primary';
+        btn.style.marginTop = '8px';
+        btn.textContent = '📲 Activer la lecture SMS sur CE téléphone';
+        btn.addEventListener('click', function () {
+            try {
+                bridge.setSmsEndpoint(url);
+                btn.textContent = '✓ Lecture SMS activée sur ce téléphone';
+                btn.disabled = true;
+            } catch (e) {
+                btn.textContent = 'Erreur — réessayez';
+            }
+        });
+        item.appendChild(btn);
+    });
+})();
 </script>
 {% endblock %}

@@ -210,6 +210,10 @@ input:focus, select:focus { outline: none; border-color: var(--green); }
 .choice-uv.selected  { border-color: #14457e; background: #d7e6fb; }
 .choice-in.selected  { border-color: #176c3a; background: #d3efdf; }
 .choice-out.selected { border-color: #9a3b2e; background: #f9d9d3; }
+/* Fond jaune : types d'opération (Nouvelle transaction) + boutons CSV/PDF. */
+.choice-jaune { background: #ffe082; border-color: #f0c94b; color: #4a3b00; }
+.choice-jaune.selected { background: #ffd23f; border-color: #c99a00; }
+.btn-jaune { background: #ffe082; border: 2px solid #f0c94b; color: #4a3b00; }
 
 .form-actions { display: flex; gap: 12px; margin-top: 8px; }
 .form-actions .btn { flex: 1; }

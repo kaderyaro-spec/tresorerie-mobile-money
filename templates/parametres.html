@@ -136,21 +136,11 @@
 <p class="settings-cat">Automatisation</p>
 <section class="block card-form">
     <h2>📩 Lecture automatique des SMS</h2>
-    <p class="hint">Faites remonter automatiquement les SMS (et notifications) de vos
-       opérateurs : les transactions sont créées automatiquement, ou mises en attente
-       de confirmation si la lecture est incertaine.</p>
-
-    <form method="post" class="sms-auto-row">
-        <input type="hidden" name="action" value="sms_auto">
-        <label class="switch-label">
-            <input type="checkbox" name="sms_auto" {% if agent.sms_auto %}checked{% endif %}
-                   onchange="this.form.submit()">
-            <span>Créer les transactions <strong>automatiquement</strong> (sans confirmation)</span>
-        </label>
-        <p class="hint">Sécurité : une opération n'est créée seule que si l'opérateur, le sens,
-           le montant <strong>et</strong> l'identifiant de transaction sont lus correctement
-           (l'identifiant évite tout doublon). Sinon, elle attend votre confirmation.</p>
-    </form>
+    <p class="hint">Les SMS de vos opérateurs remontés depuis vos téléphones créent
+       <strong>automatiquement</strong> les transactions.</p>
+    <p class="hint">🔒 Sécurité : une opération n'est créée seule que si l'opérateur, le sens,
+       le montant <strong>et</strong> l'identifiant de transaction sont lus correctement
+       (l'identifiant évite tout doublon). Sinon, elle attend votre confirmation.</p>
 
     <h3>📲 Vos appareils</h3>
     <p class="hint">Un lien par téléphone (ex. « Téléphone Wave », « Téléphone Orange »).

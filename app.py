@@ -79,7 +79,7 @@ app.jinja_env.filters["phone"] = fmt_phone
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "43"
+ASSET_VERSION = "44"
 
 # Numéro de support affiché aux agents (fiche, page « abonnement expiré », légal).
 # Provisoire : réglable via la variable d'environnement SUPPORT_PHONE.
@@ -1176,11 +1176,10 @@ def api_sms():
         norm = " ".join(body.lower().split())
         ref = "h:" + hashlib.sha1(norm.encode("utf-8")).hexdigest()[:16]
 
-    # Création automatique si activée ET lecture complète et fiable :
-    # portefeuille déterminé, sens, montant ET clé anti-doublon.
+    # Création automatique (toujours active) dès que la lecture est complète et
+    # fiable : portefeuille déterminé, sens, montant ET clé anti-doublon.
     status, tx_id = "pending", None
-    can_auto = (agent["sms_auto"] and parsed["type"] and parsed["amount"]
-                and wallet_id and ref)
+    can_auto = (parsed["type"] and parsed["amount"] and wallet_id and ref)
     if can_auto:
         conn.close()
         tx_id, err = _save_operation(
@@ -2049,11 +2048,6 @@ def parametres():
             conn.execute("UPDATE agent SET sms_token=? WHERE id=?",
                          (secrets.token_urlsafe(24), agent["id"]))
             flash("Lien de lecture des SMS (re)généré.", "success")
-
-        elif action == "sms_auto":
-            val = 1 if request.form.get("sms_auto") == "on" else 0
-            conn.execute("UPDATE agent SET sms_auto=? WHERE id=?", (val, agent["id"]))
-            flash("Création automatique " + ("activée." if val else "désactivée."), "success")
 
         elif action == "add_device":
             import secrets

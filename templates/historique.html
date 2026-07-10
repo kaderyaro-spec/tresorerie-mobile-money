@@ -27,8 +27,8 @@
 
 {% if txs %}
 <div class="export-row">
-    <a href="{{ url_for('export_csv', jour=f_jour, wallet=f_wallet, type=f_type) }}" class="btn btn-outline">⬇ CSV</a>
-    <a href="{{ url_for('export_pdf', jour=f_jour, wallet=f_wallet, type=f_type) }}" class="btn btn-outline">⬇ PDF</a>
+    <a href="{{ url_for('export_csv', jour=f_jour, wallet=f_wallet, type=f_type) }}" class="btn btn-jaune">⬇ CSV</a>
+    <a href="{{ url_for('export_pdf', jour=f_jour, wallet=f_wallet, type=f_type) }}" class="btn btn-jaune">⬇ PDF</a>
 </div>
 <ul class="tx-list">
     {% for t in txs %}
@@ -39,7 +39,7 @@
                 <span class="tx-type">{{ tx_types[t.type].label }}</span>
             </div>
             <span class="tx-amount {% if tx_types[t.type].cash < 0 %}neg{% else %}pos{% endif %}">
-                {{ t.amount | fcfa }} FCFA
+                {% if tx_types[t.type].cash < 0 %}− {% elif tx_types[t.type].cash > 0 %}+ {% endif %}{{ t.amount | fcfa }} FCFA
             </span>
         </div>
         <div class="tx-meta">

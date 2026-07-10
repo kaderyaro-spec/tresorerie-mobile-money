@@ -39,7 +39,7 @@
         {% for l in lines %}
             <tr>
                 <td><span class="op-name">{% if l.kind == 'wallet' %}{{ op_logo(l.label, 22) }} {% endif %}{{ l.label }}</span>
-                    {% if l.dette and l.dette > 0 %}<small class="dette-tag">dont dette − {{ l.dette | fcfa }}</small>{% set ns.dette = ns.dette + l.dette %}{% endif %}
+                    {% if l.dette and l.dette > 0 %}{% set ns.dette = ns.dette + l.dette %}{% endif %}
                 </td>
                 <td>{{ l.reel | fcfa }}</td>
                 <td class="ecart-cell {% if l.ecart < 0 %}ecart-neg{% elif l.ecart > 0 %}ecart-pos{% endif %}">

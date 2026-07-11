@@ -9,6 +9,9 @@ on:
       - '.github/workflows/android.yml'
   workflow_dispatch:      # bouton "Run workflow" pour relancer a la demande
 
+permissions:
+  contents: write        # necessaire pour publier la Release
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
@@ -33,9 +36,18 @@ jobs:
         working-directory: warri-android
         run: gradle assembleDebug --no-daemon --stacktrace
 
-      - name: Publier l'APK
+      - name: Publier l'APK (artifact, pour les connectes GitHub)
         uses: actions/upload-artifact@v4
         with:
           name: warri-apk
           path: warri-android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Publier l'APK en Release (lien public permanent)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create apk --title "APK Warri (derniere version)" \
+            --notes "Application Android Warri a installer sur les telephones agents." || true
+          gh release upload apk \
+            warri-android/app/build/outputs/apk/debug/app-debug.apk --clobber

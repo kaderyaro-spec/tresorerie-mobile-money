@@ -15,7 +15,7 @@
         <strong class="sub-badge sub-{{ sub.state }}">{{ sub.label }}</strong></p>
     <p class="param-line"><span>Journée en cours</span><strong>{{ agent.business_day }}</strong></p>
     <label class="lbl-mt">Nom de la boutique</label>
-    <input type="text" name="shop_name" value="{{ agent.shop_name or '' }}" placeholder="Ex : Kiosque Wend-Konta">
+    <input type="text" name="shop_name" value="{{ agent.shop_name or '' }}" placeholder="Ex : Chez Konan">
     <label class="lbl-mt">Numéro de téléphone</label>
     <input type="tel" name="phone" inputmode="numeric" class="js-phone" maxlength="14" value="{{ agent.phone | phone }}" required>
     <button type="submit" class="btn btn-primary btn-block">Enregistrer le compte</button>

@@ -144,7 +144,7 @@
        (l'identifiant évite tout doublon). Sinon, elle attend votre confirmation.</p>
 
     <h3>📲 Vos appareils</h3>
-    <p class="hint">Un lien par téléphone (ex. « Téléphone Wave », « Téléphone Orange »).
+    <p class="hint">Un lien par téléphone (ex. « Téléphone Orange », « Téléphone MTN »).
        Tous alimentent <strong>le même compte</strong>. Vous pouvez révoquer un appareil
        perdu sans toucher aux autres.</p>
     <p class="hint">👉 Étapes : 1) donnez un nom et choisissez le sous-compte plus bas,
@@ -176,18 +176,20 @@
     <form method="post" class="add-op">
         <input type="hidden" name="action" value="add_device">
         <h3>Ajouter un appareil</h3>
-        <input type="text" name="device_name" placeholder="Ex : Téléphone Wave" required>
+        <input type="text" name="device_name" placeholder="Ex : Téléphone Orange" required>
         <div class="field-inline">
             <label>Sous-compte alimenté (optionnel)</label>
             <select name="device_wallet_id">
                 <option value="">— Auto (selon l'opérateur du message) —</option>
-                {% for w in wallets %}
+                {% for w in wallets %}{% if w.operator not in no_sms_operators %}
                 <option value="{{ w.id }}">{{ wallet_name(w.operator, w.label) }}</option>
-                {% endfor %}
+                {% endif %}{% endfor %}
             </select>
         </div>
         <p class="hint">Choisissez le sous-compte si ce téléphone correspond à une SIM précise
-           (utile quand vous avez 2 SIM du même opérateur).</p>
+           (utile quand vous avez 2 SIM du même opérateur). Laissez « Auto » dans le doute :
+           l'opérateur lu dans le SMS fait foi. <strong>Wave n'apparaît pas ici</strong> :
+           Wave n'envoie pas de SMS (saisie manuelle).</p>
         <button type="submit" class="btn btn-primary btn-block">Créer le lien de l'appareil</button>
     </form>
 

@@ -79,7 +79,7 @@ app.jinja_env.filters["phone"] = fmt_phone
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "49"
+ASSET_VERSION = "50"
 
 # Numéro de support affiché aux agents (fiche, page « abonnement expiré », légal).
 # Provisoire : réglable via la variable d'environnement SUPPORT_PHONE.
@@ -1221,16 +1221,24 @@ def api_sms():
     # on ne crée RIEN automatiquement — l'agent confirme, avec le bon
     # opérateur pré-sélectionné (celui du SMS, qui fait foi).
     operator_conflict = False
+    dev_w = None
     if device and device["wallet_id"]:
-        wallet_id = device["wallet_id"]
-        dev_w = next((w for w in wallets if w["id"] == wallet_id), None)
-        if dev_w and parsed["operator"] and parsed["operator"] != dev_w["operator"]:
+        dev_w = next((w for w in wallets if w["id"] == device["wallet_id"]), None)
+        # Rattachement inutilisable : sous-compte supprimé/inactif, ou opérateur
+        # SANS SMS (Wave — aucun SMS marchand : un SMS reçu sur ce téléphone
+        # vient forcément d'un autre opérateur). On l'ignore et on route par
+        # l'opérateur lu dans le SMS.
+        if dev_w is None or dev_w["operator"] in logic.NO_SMS_OPERATORS:
+            dev_w = None
+    if dev_w:
+        if parsed["operator"] and parsed["operator"] != dev_w["operator"]:
             operator_conflict = True
             wallet_id = next((w["id"] for w in wallets
                               if w["operator"] == parsed["operator"]), None)
             eff_operator = parsed["operator"]
         else:
-            eff_operator = dev_w["operator"] if dev_w else parsed["operator"]
+            wallet_id = dev_w["id"]
+            eff_operator = dev_w["operator"]
     else:
         wallet_id = next((w["id"] for w in wallets if w["operator"] == parsed["operator"]), None)
         eff_operator = parsed["operator"]
@@ -2142,10 +2150,16 @@ def parametres():
             dev_wallet = request.form.get("device_wallet_id") or None
             # le sous-compte choisi doit appartenir au compte
             if dev_wallet:
-                chk = conn.execute("SELECT id FROM wallet WHERE id=? AND agent_id=?",
+                chk = conn.execute("SELECT id, operator FROM wallet WHERE id=? AND agent_id=?",
                                    (dev_wallet, agent["id"])).fetchone()
                 if not chk:
                     dev_wallet = None
+                elif chk["operator"] in logic.NO_SMS_OPERATORS:
+                    # Wave n'envoie aucun SMS marchand : rattacher un téléphone à
+                    # Wave enverrait les SMS des AUTRES opérateurs sur Wave.
+                    dev_wallet = None
+                    flash(f"{chk['operator']} n'envoie pas de SMS : l'appareil est créé "
+                          "en mode « Auto » (l'opérateur du SMS fait foi).", "info")
             if not name:
                 flash("Donnez un nom à l'appareil (ex. « Téléphone Wave »).", "error")
             else:
@@ -2184,6 +2198,7 @@ def parametres():
     return render_template("parametres.html", agent=agent, wallets=wallets, dispo=dispo,
                            employees=employees, devices=devices,
                            sub=subscription_info(agent),
+                           no_sms_operators=logic.NO_SMS_OPERATORS,
                            recovery_code=session.pop("show_recovery", None))
 
 

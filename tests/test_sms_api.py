@@ -178,6 +178,91 @@ def test_migration_purge_les_anciens_messages_non_transaction(client):
     assert "retrait 2000" in bodies                 # vrai en-attente conservé
 
 
+def _add_device_row(agent_id, token, wallet_id):
+    conn = db.get_db()
+    conn.execute("INSERT INTO sms_device (agent_id, name, token, wallet_id, created_at) "
+                 "VALUES (?,?,?,?,?)", (agent_id, "Tel test", token, wallet_id, db.now_str()))
+    conn.commit()
+    conn.close()
+
+
+def _wallet_id(operator, agent_id=1):
+    conn = db.get_db()
+    row = conn.execute("SELECT id FROM wallet WHERE agent_id=? AND operator=?",
+                       (agent_id, operator)).fetchone()
+    conn.close()
+    return row["id"] if row else None
+
+
+def test_rattachement_wave_ignore_l_operateur_du_sms_fait_foi(client):
+    """BUG TESTEURS : appareil rattaché à Wave + SMS Orange -> l'opération
+    partait sur WAVE. Désormais le rattachement Wave est ignoré : l'opération
+    va sur ORANGE (l'opérateur lu dans le SMS fait foi)."""
+    make_agent(client, operators=["Orange Money", "Wave"])
+    _add_device_row(1, "tok-wave", _wallet_id("Wave"))
+
+    r = client.post("/api/sms?token=tok-wave", data={"body": ORANGE_DEPOT, "sender": "+454"})
+    assert r.get_json()["auto"] is True
+    conn = db.get_db()
+    tx = conn.execute('SELECT wallet_id FROM "transaction" WHERE agent_id=1').fetchone()
+    conn.close()
+    assert tx["wallet_id"] == _wallet_id("Orange Money")   # PAS le portefeuille Wave
+
+
+def test_rattachement_wave_sans_operateur_reconnu_reste_en_attente(client):
+    """Appareil rattaché à Wave + SMS dont l'opérateur n'est PAS reconnu :
+    AUCUNE création automatique (avant : auto-créé sur Wave via l'empreinte)."""
+    make_agent(client, operators=["Orange Money", "Wave"])
+    _add_device_row(1, "tok-wave2", _wallet_id("Wave"))
+
+    r = client.post("/api/sms?token=tok-wave2",
+                    data={"body": "Retrait de 5000 F effectue avec succes.",
+                          "sender": "12345"})     # expéditeur inconnu
+    assert r.get_json()["auto"] is False
+    assert _tx_count(1) == 0                       # rien d'auto-créé
+    conn = db.get_db()
+    row = conn.execute("SELECT status FROM sms_inbox WHERE agent_id=1").fetchone()
+    conn.close()
+    assert row["status"] == "pending"              # l'agent décidera
+
+
+def test_creation_appareil_refuse_le_rattachement_wave(client):
+    """L'écran Réglages ne peut plus créer d'appareil rattaché à Wave."""
+    make_agent(client, operators=["Orange Money", "Wave"])
+    client.post("/parametres", data={"action": "add_device", "device_name": "Tel X",
+                                     "device_wallet_id": _wallet_id("Wave")})
+    conn = db.get_db()
+    dev = conn.execute("SELECT wallet_id FROM sms_device WHERE agent_id=1").fetchone()
+    conn.close()
+    assert dev["wallet_id"] is None                # créé en mode « Auto »
+
+
+def test_migration_delie_les_appareils_rattaches_a_wave(client):
+    """Les appareils déjà rattachés à Wave (bug testeurs) sont déliés."""
+    import app as appmod
+    make_agent(client, operators=["Orange Money", "Wave"])
+    _add_device_row(1, "tok-old", _wallet_id("Wave"))
+    with appmod.app.app_context():
+        db.init_db()                               # rejoue les migrations
+    conn = db.get_db()
+    dev = conn.execute("SELECT wallet_id FROM sms_device WHERE token='tok-old'").fetchone()
+    conn.close()
+    assert dev["wallet_id"] is None
+
+
+def test_rattachement_vers_sous_compte_supprime_route_par_le_sms(client):
+    """Appareil rattaché à un sous-compte disparu : pas de plantage, on route
+    par l'opérateur lu dans le SMS."""
+    make_agent(client, operators="Orange Money")
+    _add_device_row(1, "tok-ghost", 99999)         # portefeuille inexistant
+    r = client.post("/api/sms?token=tok-ghost", data={"body": ORANGE_DEPOT, "sender": "+454"})
+    assert r.get_json()["auto"] is True
+    conn = db.get_db()
+    tx = conn.execute('SELECT wallet_id FROM "transaction" WHERE agent_id=1').fetchone()
+    conn.close()
+    assert tx["wallet_id"] == _wallet_id("Orange Money")
+
+
 def test_vrai_depot_est_conserve(client):
     make_agent(client, operators="Orange Money")
     _set_token(1, "tok-3")

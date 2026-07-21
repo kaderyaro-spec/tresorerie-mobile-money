@@ -322,6 +322,11 @@ def _migrate(conn):
     # Filet permanent : de telles lignes ne peuvent plus être créées.
     conn.execute("DELETE FROM sms_inbox WHERE status='pending' "
                  "AND (parsed_type IS NULL OR parsed_amount IS NULL)")
+    # Wave n'envoie aucun SMS marchand : un appareil « rattaché » à Wave
+    # attribuait à Wave des SMS venus d'autres opérateurs (bug testeurs).
+    # On délie ces appareils : l'opérateur lu dans le SMS fera foi.
+    conn.execute("UPDATE sms_device SET wallet_id=NULL WHERE wallet_id IN "
+                 "(SELECT id FROM wallet WHERE operator='Wave')")
 
 
 def init_db():

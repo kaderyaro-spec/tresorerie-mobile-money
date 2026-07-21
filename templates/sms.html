@@ -18,6 +18,7 @@
     {% for s in pending %}
     <li class="tx-item sms-item">
         <div class="sms-body">💬 {{ s.body }}</div>
+        {% if s.sender %}<div class="hint">📟 Expéditeur : {{ s.sender }}</div>{% endif %}
         <form method="post" action="{{ url_for('sms_confirm', sms_id=s.id) }}" class="sms-form">
             <div class="sms-fields">
                 <select name="type" required>

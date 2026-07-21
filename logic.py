@@ -352,6 +352,11 @@ _SENDER_HINTS = {
     "MTN": ["mobilemoney", "mobile money"],
 }
 
+# Opérateurs qui n'envoient AUCUN SMS marchand (l'opération n'apparaît que dans
+# leur app). Un appareil ne doit JAMAIS leur être rattaché : tout SMS reçu sur
+# ce téléphone vient forcément d'un AUTRE opérateur.
+NO_SMS_OPERATORS = {"Wave"}
+
 
 def _sms_amount(token):
     """Convertit « 300000.00 », « 30 000 », « 10300.00 » → entier en F."""

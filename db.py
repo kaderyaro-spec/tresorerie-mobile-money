@@ -291,8 +291,11 @@ def _migrate(conn):
     if "employee_id" not in tcols:
         conn.execute('ALTER TABLE "transaction" ADD COLUMN employee_id INTEGER')
     # L'index se crée APRÈS l'ajout de la colonne (bases existantes incluses).
-    conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_tx_client_uid '
-                 'ON "transaction"(client_uid)')
+    # Anti-doublon PAR AGENT : la même référence peut exister chez deux agents
+    # différents (empreintes Wave, SMS transféré…) sans que l'un absorbe l'autre.
+    conn.execute("DROP INDEX IF EXISTS idx_tx_client_uid")
+    conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_tx_agent_client_uid '
+                 'ON "transaction"(agent_id, client_uid)')
     if "dette" not in cols:
         conn.execute("ALTER TABLE cloture_line ADD COLUMN dette REAL NOT NULL DEFAULT 0")
     dcols = conn.column_names("dette")

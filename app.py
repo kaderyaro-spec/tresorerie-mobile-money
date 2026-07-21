@@ -990,10 +990,12 @@ def _save_operation(tx_type, wallet_id, amount, commission=0, client_uid=None,
     conn = db.get_db()
     agent = conn.execute("SELECT * FROM agent WHERE id=?", (aid,)).fetchone()
 
-    # Idempotence (synchronisation hors-ligne : le même envoi peut arriver 2 fois)
+    # Idempotence PAR AGENT (le même envoi peut arriver 2 fois ; une référence
+    # identique chez un AUTRE agent ne doit jamais absorber celle-ci).
     if client_uid:
         existing = conn.execute(
-            'SELECT id FROM "transaction" WHERE client_uid=?', (client_uid,)
+            'SELECT id FROM "transaction" WHERE client_uid=? AND agent_id=?',
+            (client_uid, aid)
         ).fetchone()
         if existing:
             conn.close()
@@ -1171,10 +1173,21 @@ def api_sms():
     # Sous-compte cible : si l'appareil est rattaché à un sous-compte précis
     # (ex. « Téléphone Orange SIM 2 »), l'opération y va directement ; sinon on
     # déduit le portefeuille par l'opérateur reconnu dans le message.
+    # GARDE-FOU double SIM : si l'opérateur LU dans le SMS contredit le
+    # sous-compte rattaché (ex. SMS MTN sur un appareil rattaché à Orange),
+    # on ne crée RIEN automatiquement — l'agent confirme, avec le bon
+    # opérateur pré-sélectionné (celui du SMS, qui fait foi).
+    operator_conflict = False
     if device and device["wallet_id"]:
         wallet_id = device["wallet_id"]
         dev_w = next((w for w in wallets if w["id"] == wallet_id), None)
-        eff_operator = dev_w["operator"] if dev_w else parsed["operator"]
+        if dev_w and parsed["operator"] and parsed["operator"] != dev_w["operator"]:
+            operator_conflict = True
+            wallet_id = next((w["id"] for w in wallets
+                              if w["operator"] == parsed["operator"]), None)
+            eff_operator = parsed["operator"]
+        else:
+            eff_operator = dev_w["operator"] if dev_w else parsed["operator"]
     else:
         wallet_id = next((w["id"] for w in wallets if w["operator"] == parsed["operator"]), None)
         eff_operator = parsed["operator"]
@@ -1191,7 +1204,8 @@ def api_sms():
     # Création automatique (toujours active) dès que la lecture est complète et
     # fiable : portefeuille déterminé, sens, montant ET clé anti-doublon.
     status, tx_id = "pending", None
-    can_auto = (parsed["type"] and parsed["amount"] and wallet_id and ref)
+    can_auto = (parsed["type"] and parsed["amount"] and wallet_id and ref
+                and not operator_conflict)
     if can_auto:
         conn.close()
         tx_id, err = _save_operation(

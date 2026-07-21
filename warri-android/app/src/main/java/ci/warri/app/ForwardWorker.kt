@@ -16,9 +16,23 @@ import java.net.URLEncoder
 class ForwardWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params) {
 
     override fun doWork(): Result {
-        val endpoint = inputData.getString("endpoint") ?: return Result.failure()
+        val rawEndpoint = inputData.getString("endpoint") ?: return Result.failure()
         val sender = inputData.getString("sender") ?: ""
         val body = inputData.getString("body") ?: ""
+
+        // Sécurité : le jeton ne voyage plus dans l'URL (les URL finissent dans
+        // les journaux des serveurs) mais dans l'en-tête X-Token. Compatible avec
+        // les liens déjà enregistrés au format « …/api/sms?token=… ».
+        var token: String? = null
+        val parts = rawEndpoint.split("?", limit = 2)
+        val endpoint = if (parts.size == 2) {
+            val kept = parts[1].split("&").filter { p ->
+                val isTok = p.startsWith("token=")
+                if (isTok) token = p.substringAfter("=")
+                !isTok
+            }
+            parts[0] + if (kept.isEmpty()) "" else "?" + kept.joinToString("&")
+        } else rawEndpoint
 
         return try {
             val payload = "sender=" + URLEncoder.encode(sender, "UTF-8") +
@@ -31,6 +45,7 @@ class ForwardWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params
                 readTimeout = 15000
                 setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
                 setRequestProperty("X-Requested-With", "warri-android")
+                token?.let { setRequestProperty("X-Token", it) }
             }
             conn.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
             val code = conn.responseCode

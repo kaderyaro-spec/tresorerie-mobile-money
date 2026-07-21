@@ -9,6 +9,11 @@
    vérifiez et confirmez d'un geste.</p>
 
 {% if pending %}
+<form method="post" action="{{ url_for('sms_reject_all') }}"
+      onsubmit="return confirm('Ignorer les {{ pending|length }} SMS en attente ?');"
+      style="margin-bottom:12px">
+    <button type="submit" class="btn btn-secondary btn-block">🧹 Tout ignorer ({{ pending|length }})</button>
+</form>
 <ul class="tx-list">
     {% for s in pending %}
     <li class="tx-item sms-item">

@@ -79,7 +79,7 @@ app.jinja_env.filters["phone"] = fmt_phone
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "47"
+ASSET_VERSION = "48"
 
 # Numéro de support affiché aux agents (fiche, page « abonnement expiré », légal).
 # Provisoire : réglable via la variable d'environnement SUPPORT_PHONE.
@@ -1156,6 +1156,18 @@ def api_sms():
     ops = [w["operator"] for w in wallets]
     parsed = logic.parse_sms(body, sender, ops)
 
+    # FILTRE : on ne retient QUE les SMS reconnus comme dépôt/retrait (sens ET
+    # montant présents). Tous les autres messages du téléphone (perso, promos,
+    # codes OTP, alertes de solde…) sont ignorés silencieusement — ils ne créent
+    # plus d'entrée « à confirmer » sur l'accueil.
+    if not (parsed["type"] and parsed["amount"]):
+        if device:
+            conn.execute("UPDATE sms_device SET last_seen=? WHERE id=?",
+                         (db.now_str(), device["id"]))
+            conn.commit()
+        conn.close()
+        return jsonify({"ok": True, "ignored": "non_transaction"})
+
     # Sous-compte cible : si l'appareil est rattaché à un sous-compte précis
     # (ex. « Téléphone Orange SIM 2 »), l'opération y va directement ; sinon on
     # déduit le portefeuille par l'opérateur reconnu dans le message.
@@ -1255,6 +1267,18 @@ def sms_reject(sms_id):
                  (sms_id, session["agent_id"]))
     conn.commit()
     conn.close()
+    return redirect(url_for("sms_inbox"))
+
+
+@app.route("/sms/reject-all", methods=["POST"])
+def sms_reject_all():
+    """Ignore d'un coup tous les SMS en attente (nettoyage rapide)."""
+    conn = db.get_db()
+    conn.execute("UPDATE sms_inbox SET status='rejected' "
+                 "WHERE agent_id=? AND status='pending'", (session["agent_id"],))
+    conn.commit()
+    conn.close()
+    flash("Tous les SMS en attente ont été ignorés. ✓", "success")
     return redirect(url_for("sms_inbox"))
 
 

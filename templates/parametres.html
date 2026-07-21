@@ -136,8 +136,9 @@
 <p class="settings-cat">Automatisation</p>
 <section class="block card-form">
     <h2>📩 Lecture automatique des SMS</h2>
-    <p class="hint">Les SMS de vos opérateurs remontés depuis vos téléphones créent
-       <strong>automatiquement</strong> les transactions.</p>
+    <p class="hint">Seuls les SMS de <strong>dépôt / retrait</strong> de vos opérateurs
+       sont lus : ils créent <strong>automatiquement</strong> les transactions.
+       Les autres messages du téléphone (perso, promos, codes) sont <strong>ignorés</strong>.</p>
     <p class="hint">🔒 Sécurité : une opération n'est créée seule que si l'opérateur, le sens,
        le montant <strong>et</strong> l'identifiant de transaction sont lus correctement
        (l'identifiant évite tout doublon). Sinon, elle attend votre confirmation.</p>
@@ -147,10 +148,11 @@
        Tous alimentent <strong>le même compte</strong>. Vous pouvez révoquer un appareil
        perdu sans toucher aux autres.</p>
     <p class="hint">👉 Étapes : 1) donnez un nom et choisissez le sous-compte plus bas,
-       2) touchez <strong>« Créer le lien de l'appareil »</strong>. L'appareil apparaît
-       ici. Dans l'<strong>app Warri Android</strong>, un bouton
-       <strong>« Activer la lecture SMS sur ce téléphone »</strong> s'affiche alors sur
-       l'appareil : touchez-le et autorisez les SMS.</p>
+       2) touchez <strong>« Créer le lien de l'appareil »</strong>. Dans l'<strong>app
+       Warri Android</strong>, la lecture SMS <strong>s'active toute seule</strong>
+       (ou en un seul tap si vous avez plusieurs téléphones), puis autorisez les SMS.</p>
+    <p class="hint">✅ <strong>Une seule fois — c'est permanent.</strong> Inutile de
+       réactiver à chaque connexion : une fois autorisée, la lecture reste active.</p>
 
     {% for d in devices %}
     <div class="device-item">
@@ -259,11 +261,39 @@ document.querySelectorAll('.copy-url').forEach(function (btn) {
 });
 
 // Application Warri Android : lecture des SMS INTÉGRÉE (sans app tierce).
-// Un bouton « Activer sur ce téléphone » relie l'appareil en un tap.
+// - Déjà active sur ce téléphone → bannière verte, RIEN à refaire (même après
+//   reconnexion : le lien est mémorisé de façon permanente sur l'appareil).
+// - Un seul téléphone → activation AUTOMATIQUE, aucun tap nécessaire.
+// - Plusieurs téléphones → un bouton par appareil pour choisir CE téléphone.
 (function () {
     var bridge = window.WarriAndroid;
     if (!bridge || !bridge.isWarriApp) return;
-    document.querySelectorAll('.device-item').forEach(function (item) {
+
+    var status = 'no_endpoint';
+    try { status = bridge.smsStatus(); } catch (e) {}
+
+    var items = Array.prototype.slice.call(document.querySelectorAll('.device-item'));
+
+    function banner(text, ok) {
+        var d = document.createElement('div');
+        d.style.cssText = 'margin:10px 0;padding:10px 12px;border-radius:10px;font-weight:700;'
+            + (ok ? 'background:#e6f4ea;color:#176c3a;border:1px solid #bfe3c9;'
+                  : 'background:#fdecea;color:#9a3b2e;border:1px solid #f5c6c0;');
+        d.textContent = text;
+        return d;
+    }
+
+    // Déjà actif sur CE téléphone → rien à refaire.
+    if (status === 'ready') {
+        if (items[0]) items[0].parentNode.insertBefore(
+            banner('✅ Lecture SMS active sur ce téléphone — rien à faire, même après reconnexion.', true),
+            items[0]);
+        return;
+    }
+
+    // Pas encore actif : un bouton d'activation par appareil.
+    var btns = [];
+    items.forEach(function (item) {
         var box = item.querySelector('.device-url');
         if (!box) return;
         var url = (box.dataset.url || box.textContent).trim();
@@ -271,18 +301,33 @@ document.querySelectorAll('.copy-url').forEach(function (btn) {
         btn.type = 'button';
         btn.className = 'btn btn-primary';
         btn.style.marginTop = '8px';
-        btn.textContent = '📲 Activer la lecture SMS sur CE téléphone';
+        btn.textContent = (status === 'no_permission')
+            ? '🔓 Autoriser la lecture SMS sur CE téléphone'
+            : '📲 Activer la lecture SMS sur CE téléphone';
         btn.addEventListener('click', function () {
             try {
                 bridge.setSmsEndpoint(url);
-                btn.textContent = '✓ Lecture SMS activée sur ce téléphone';
+                btn.textContent = '✓ Lecture SMS activée — c\'est permanent';
                 btn.disabled = true;
             } catch (e) {
                 btn.textContent = 'Erreur — réessayez';
             }
         });
         item.appendChild(btn);
+        btns.push(btn);
     });
+
+    // Un seul téléphone : activation AUTOMATIQUE (aucun tap à faire).
+    if (items.length === 1 && btns[0]) {
+        var b0 = items[0].querySelector('.device-url');
+        if (b0) {
+            try {
+                bridge.setSmsEndpoint((b0.dataset.url || b0.textContent).trim());
+                btns[0].textContent = '✓ Lecture SMS activée automatiquement (permanent)';
+                btns[0].disabled = true;
+            } catch (e) {}
+        }
+    }
 })();
 </script>
 {% endblock %}

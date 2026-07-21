@@ -79,7 +79,7 @@ app.jinja_env.filters["phone"] = fmt_phone
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "48"
+ASSET_VERSION = "49"
 
 # Numéro de support affiché aux agents (fiche, page « abonnement expiré », légal).
 # Provisoire : réglable via la variable d'environnement SUPPORT_PHONE.
@@ -1122,6 +1122,46 @@ def api_sync():
 # ---------------------------------------------------------------------------
 # Lecture automatique des SMS (via une app de transfert SMS sur le téléphone)
 # ---------------------------------------------------------------------------
+SMS_RATE_LIMIT = 60     # SMS max par minute et par appareil (large : un vrai
+                        # point marchand n'atteint jamais ce rythme)
+
+
+def _sms_rate_ok(token):
+    """Fenêtre d'une minute par jeton : borne les dégâts si un lien fuite
+    (inondation du compte). Une ligne par appareil, auto-réinitialisée."""
+    from datetime import datetime, timedelta
+    now = datetime.now()
+    key = "smsrate:" + token[:48]
+    conn = db.get_db()
+    row = conn.execute("SELECT fails, locked_until FROM throttle WHERE k=?",
+                       (key,)).fetchone()
+    window_end = None
+    if row and row["locked_until"]:
+        try:
+            window_end = datetime.strptime(row["locked_until"], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            window_end = None
+    if not row or not window_end or now >= window_end:
+        # Nouvelle fenêtre d'une minute.
+        end = (now + timedelta(seconds=60)).strftime("%Y-%m-%d %H:%M:%S")
+        if row:
+            conn.execute("UPDATE throttle SET fails=1, locked_until=? WHERE k=?",
+                         (end, key))
+        else:
+            conn.execute("INSERT INTO throttle (k, fails, locked_until) VALUES (?,1,?)",
+                         (key, end))
+        conn.commit()
+        conn.close()
+        return True
+    if row["fails"] >= SMS_RATE_LIMIT:
+        conn.close()
+        return False
+    conn.execute("UPDATE throttle SET fails=fails+1 WHERE k=?", (key,))
+    conn.commit()
+    conn.close()
+    return True
+
+
 @app.route("/api/sms", methods=["POST"])
 def api_sms():
     """
@@ -1144,6 +1184,9 @@ def api_sms():
             agent = db.get_agent_by_sms_token(token)
     if not agent:
         return jsonify({"ok": False, "error": "token_invalide"}), 401
+    if not _sms_rate_ok(token):
+        # 429 : l'app Android réessaie plus tard (le SMS n'est pas perdu).
+        return jsonify({"ok": False, "error": "trop_de_requetes"}), 429
 
     data = request.get_json(silent=True) or request.form
     body = (data.get("body") or data.get("text") or data.get("message") or "").strip()
@@ -1235,6 +1278,12 @@ def api_sms():
 def sms_inbox():
     conn = db.get_db()
     aid = session["agent_id"]
+    # Confidentialité : les SMS ignorés ne sont pas gardés indéfiniment.
+    from datetime import datetime, timedelta
+    cutoff = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+    conn.execute("DELETE FROM sms_inbox WHERE status='rejected' AND received_at<?",
+                 (cutoff,))
+    conn.commit()
     pending = conn.execute(
         "SELECT * FROM sms_inbox WHERE agent_id=? AND status='pending' "
         "ORDER BY received_at DESC", (aid,)).fetchall()

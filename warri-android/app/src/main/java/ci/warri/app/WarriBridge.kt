@@ -27,4 +27,10 @@ class WarriBridge(private val activity: MainActivity) {
         !activity.hasSmsPermission() -> "no_permission"
         else -> "ready"
     }
+
+    /** Lien actuellement enregistré sur CE téléphone ("" si aucun). Permet à la
+     *  page Réglages de vérifier qu'il correspond toujours à un appareil actif
+     *  (et non à un appareil révoqué). */
+    @JavascriptInterface
+    fun getEndpoint(): String = Prefs.getEndpoint(activity) ?: ""
 }

@@ -119,6 +119,65 @@ def test_token_accepte_dans_l_en_tete_x_token(client):
     assert r.get_json()["auto"] is True
 
 
+def test_limite_de_debit_renvoie_429(client, monkeypatch):
+    """Au-delà de la limite par minute, le serveur répond 429 (l'app Android
+    réessaie plus tard : le SMS n'est pas perdu)."""
+    import app as appmod
+    monkeypatch.setattr(appmod, "SMS_RATE_LIMIT", 3)
+    make_agent(client, operators="Orange Money")
+    _set_token(1, "tok-rate")
+    for _ in range(3):
+        r = client.post("/api/sms?token=tok-rate",
+                        data={"body": "promo sans interet", "sender": "PUB"})
+        assert r.status_code == 200
+    r = client.post("/api/sms?token=tok-rate",
+                    data={"body": "promo sans interet", "sender": "PUB"})
+    assert r.status_code == 429
+    assert r.get_json()["error"] == "trop_de_requetes"
+
+
+def test_purge_des_sms_rejetes_apres_30_jours(client):
+    """Les SMS ignorés ne restent pas indéfiniment en base (confidentialité)."""
+    make_agent(client, operators="Orange Money")
+    conn = db.get_db()
+    conn.execute("INSERT INTO sms_inbox (agent_id,sender,body,received_at,status) "
+                 "VALUES (1,'x','tres vieux','2026-01-01 10:00:00','rejected')")
+    conn.execute("INSERT INTO sms_inbox (agent_id,sender,body,received_at,status) "
+                 "VALUES (1,'x','recent',?,'rejected')", (db.now_str(),))
+    conn.commit()
+    conn.close()
+    client.get("/sms")                              # la purge tourne à l'affichage
+    conn = db.get_db()
+    bodies = [r["body"] for r in conn.execute("SELECT body FROM sms_inbox").fetchall()]
+    conn.close()
+    assert "tres vieux" not in bodies
+    assert "recent" in bodies                       # < 30 jours : conservé
+
+
+def test_migration_purge_les_anciens_messages_non_transaction(client):
+    """Nettoyage unique : les « en attente » illisibles stockés AVANT le filtre
+    (messages perso, promos…) sont supprimés ; les vrais en-attente restent."""
+    import app as appmod
+    make_agent(client, operators="Orange Money")
+    conn = db.get_db()
+    conn.execute("INSERT INTO sms_inbox (agent_id,sender,body,received_at,status,"
+                 "parsed_type,parsed_amount) VALUES (1,'promo','Gagnez un cadeau !',?,"
+                 "'pending',NULL,NULL)", (db.now_str(),))
+    conn.execute("INSERT INTO sms_inbox (agent_id,sender,body,received_at,status,"
+                 "parsed_type,parsed_amount) VALUES (1,'MobileMoney','retrait 2000',?,"
+                 "'pending','retrait_client',2000)", (db.now_str(),))
+    conn.commit()
+    conn.close()
+    with appmod.app.app_context():
+        db.init_db()                                # rejoue les migrations
+    conn = db.get_db()
+    bodies = [r["body"] for r in conn.execute(
+        "SELECT body FROM sms_inbox WHERE status='pending'").fetchall()]
+    conn.close()
+    assert "Gagnez un cadeau !" not in bodies       # parasite purgé
+    assert "retrait 2000" in bodies                 # vrai en-attente conservé
+
+
 def test_vrai_depot_est_conserve(client):
     make_agent(client, operators="Orange Money")
     _set_token(1, "tok-3")

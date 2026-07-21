@@ -274,6 +274,27 @@ document.querySelectorAll('.copy-url').forEach(function (btn) {
 
     var items = Array.prototype.slice.call(document.querySelectorAll('.device-item'));
 
+    // Le lien enregistré sur CE téléphone correspond-il encore à un appareil
+    // ACTIF ? (un appareil révoqué garde son lien local, mais le serveur le
+    // refuse : il faut réactiver, pas afficher « tout va bien »)
+    var revoked = false;
+    if (status === 'ready' && typeof bridge.getEndpoint === 'function') {
+        var localTok = '';
+        try {
+            var ep = bridge.getEndpoint() || '';
+            var mt = ep.match(/[?&]token=([^&\s]+)/);
+            localTok = mt ? mt[1] : '';
+        } catch (e) {}
+        if (localTok) {
+            var known = items.some(function (item) {
+                var b = item.querySelector('.device-url');
+                var u = b ? (b.dataset.url || b.textContent) : '';
+                return u.indexOf('token=' + localTok) !== -1;
+            });
+            if (!known) { revoked = true; status = 'no_endpoint'; }
+        }
+    }
+
     function banner(text, ok) {
         var d = document.createElement('div');
         d.style.cssText = 'margin:10px 0;padding:10px 12px;border-radius:10px;font-weight:700;'
@@ -289,6 +310,13 @@ document.querySelectorAll('.copy-url').forEach(function (btn) {
             banner('✅ Lecture SMS active sur ce téléphone — rien à faire, même après reconnexion.', true),
             items[0]);
         return;
+    }
+
+    // Appareil révoqué : prévenir clairement (le téléphone n'envoie plus rien).
+    if (revoked && items[0]) {
+        items[0].parentNode.insertBefore(
+            banner('⚠️ L\'appareil relié à ce téléphone a été révoqué — réactivez la lecture SMS ci-dessous.', false),
+            items[0]);
     }
 
     // Pas encore actif : un bouton d'activation par appareil.

@@ -316,6 +316,12 @@ def _migrate(conn):
         conn.execute('ALTER TABLE "transaction" ADD COLUMN deleted_at TEXT')
     if "deleted_by" not in tcols2:
         conn.execute('ALTER TABLE "transaction" ADD COLUMN deleted_by INTEGER')
+    # Confidentialité : avant le filtre serveur (v48), TOUS les SMS du téléphone
+    # étaient stockés. Les « en attente » sans sens OU sans montant sont des
+    # messages non-transaction (perso, promos, codes…) : on les supprime.
+    # Filet permanent : de telles lignes ne peuvent plus être créées.
+    conn.execute("DELETE FROM sms_inbox WHERE status='pending' "
+                 "AND (parsed_type IS NULL OR parsed_amount IS NULL)")
 
 
 def init_db():

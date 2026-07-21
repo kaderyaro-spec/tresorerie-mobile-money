@@ -10,8 +10,10 @@ import java.net.URLEncoder
 /**
  * Envoie un SMS (expéditeur + texte) au lien Warri par POST form-urlencoded.
  * - 2xx  -> succès
+ * - 401  -> appareil révoqué : on efface le lien local (l'app repropose l'activation)
+ * - 429  -> limite de débit : réessai plus tard (le SMS n'est pas perdu)
  * - 5xx / réseau -> réessai (WorkManager relance plus tard)
- * - 4xx  -> échec définitif (ex. token invalide : inutile d'insister)
+ * - autres 4xx -> échec définitif (inutile d'insister)
  */
 class ForwardWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params) {
 
@@ -53,6 +55,14 @@ class ForwardWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params
 
             when {
                 code in 200..299 -> Result.success()
+                // Jeton refusé = appareil révoqué : on efface le lien local pour
+                // que l'app repropose l'activation (au lieu d'insister à vide).
+                code == 401 -> {
+                    Prefs.setEndpoint(applicationContext, "")
+                    Result.failure()
+                }
+                // Limite de débit : on réessaie plus tard, le SMS n'est pas perdu.
+                code == 429 -> Result.retry()
                 code in 500..599 -> Result.retry()
                 else -> Result.failure()
             }

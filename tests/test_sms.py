@@ -49,6 +49,34 @@ def test_shortcode_ne_matche_pas_le_corps():
     assert r["operator"] is None
 
 
+def test_orange_retrait_colle_a_l_alerte_vigilance():
+    """Format RÉEL (terrain, juillet 2026) : l'alerte « Vigilance Arnaque » et le
+    retrait arrivent COLLÉS dans un seul SMS. Le décodeur doit lire le retrait
+    (et pas le « Nouveau Solde » de l'alerte)."""
+    r = logic.parse_sms(
+        "Attention Vigilance Arnaque . Nouveau Solde 420806.00 F a verifier au "
+        "#145*61#  avant paiement.Retrait de 0708223099 effectue. "
+        "Montant 40000.00 F.ID Transaction: CO260722.1546.C94702.",
+        sender="+454", known_operators=OPS)
+    assert r["operator"] == "Orange Money"
+    assert r["type"] == "retrait_client"
+    assert r["amount"] == 40000              # le Montant, PAS le Nouveau Solde
+    assert r["ref"] == "CO260722.1546.C94702"
+
+
+def test_orange_depot_reel_terrain():
+    """Format RÉEL (terrain, juillet 2026) : dépôt Orange complet."""
+    r = logic.parse_sms(
+        "Le depot vers le 0758088150 est reussi. Montant 7000.00 F, Frais 0.00 F, "
+        "Commission 0.00 F, ID Transaction: CI260722.1721.A15807, "
+        "Nouveau Solde 83106.00 F",
+        sender="+454", known_operators=OPS)
+    assert r["operator"] == "Orange Money"
+    assert r["type"] == "depot_client"
+    assert r["amount"] == 7000
+    assert r["ref"] == "CI260722.1721.A15807"
+
+
 def test_orange_alerte_non_transaction_ignoree():
     """Un message d'alerte (pas une opération) ne doit RIEN pré-remplir."""
     r = _parse("Attention Vigilance Arnaque . Nouveau Solde 135715.00 F "

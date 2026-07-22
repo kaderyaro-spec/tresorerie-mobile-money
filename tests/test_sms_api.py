@@ -263,6 +263,28 @@ def test_rattachement_vers_sous_compte_supprime_route_par_le_sms(client):
     assert tx["wallet_id"] == _wallet_id("Orange Money")
 
 
+RETRAIT_COLLE_ALERTE = ("Attention Vigilance Arnaque . Nouveau Solde 420806.00 F "
+                        "a verifier au #145*61#  avant paiement.Retrait de 0708223099 "
+                        "effectue. Montant 40000.00 F.ID Transaction: CO260722.1546.C94702.")
+
+
+def test_bout_en_bout_retrait_reel_auto_cree_sur_orange(client):
+    """Bout en bout, format terrain : le retrait collé à l'alerte crée la
+    transaction AUTOMATIQUEMENT, sur Orange (même si l'agent a aussi Wave)."""
+    make_agent(client, operators=["Orange Money", "Wave"])
+    _set_token(1, "tok-e2e")
+    r = client.post("/api/sms?token=tok-e2e",
+                    data={"body": RETRAIT_COLLE_ALERTE, "sender": "+454"})
+    assert r.get_json()["auto"] is True
+    conn = db.get_db()
+    tx = conn.execute('SELECT type, amount, wallet_id FROM "transaction" '
+                      'WHERE agent_id=1').fetchone()
+    conn.close()
+    assert tx["type"] == "retrait_client"
+    assert tx["amount"] == 40000
+    assert tx["wallet_id"] == _wallet_id("Orange Money")   # PAS Wave
+
+
 def test_vrai_depot_est_conserve(client):
     make_agent(client, operators="Orange Money")
     _set_token(1, "tok-3")

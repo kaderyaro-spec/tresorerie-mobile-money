@@ -79,7 +79,7 @@ app.jinja_env.filters["phone"] = fmt_phone
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "50"
+ASSET_VERSION = "51"
 
 # Numéro de support affiché aux agents (fiche, page « abonnement expiré », légal).
 # Provisoire : réglable via la variable d'environnement SUPPORT_PHONE.
@@ -1339,6 +1339,39 @@ def sms_reject(sms_id):
     conn.commit()
     conn.close()
     return redirect(url_for("sms_inbox"))
+
+
+@app.route("/api/device/auto", methods=["POST"])
+def api_device_auto():
+    """
+    Activation AUTOMATIQUE de la lecture SMS depuis l'app Android : renvoie le
+    lien de l'appareil de l'agent connecté (créé au besoin). Appelée par toutes
+    les pages quand la lecture n'est pas encore active sur ce téléphone.
+    - 0 appareil  -> on en crée un (« Téléphone principal »)
+    - 1 appareil  -> on renvoie son lien
+    - plusieurs   -> ambigu : l'agent choisit dans Réglages (multi-téléphones)
+    """
+    import secrets
+    aid = session["agent_id"]
+    conn = db.get_db()
+    devices = conn.execute(
+        "SELECT * FROM sms_device WHERE agent_id=? AND active=1 ORDER BY id",
+        (aid,)).fetchall()
+    if len(devices) > 1:
+        conn.close()
+        return jsonify({"ok": True, "multiple": True})
+    if devices:
+        token = devices[0]["token"]
+    else:
+        token = secrets.token_urlsafe(24)
+        conn.execute(
+            "INSERT INTO sms_device (agent_id, name, token, wallet_id, created_at) "
+            "VALUES (?,?,?,?,?)",
+            (aid, "Téléphone principal", token, None, db.now_str()))
+        conn.commit()
+    conn.close()
+    return jsonify({"ok": True,
+                    "url": request.host_url + "api/sms?token=" + token})
 
 
 @app.route("/sms/reject-all", methods=["POST"])

@@ -173,6 +173,9 @@
     </div>
     {% endfor %}
 
+    <!-- Rempli par l'app Warri Android : bilan de santé de la lecture SMS -->
+    <div id="sms-diag"></div>
+
     <form method="post" class="add-op">
         <input type="hidden" name="action" value="add_device">
         <h3>Ajouter un appareil</h3>
@@ -358,6 +361,71 @@ document.querySelectorAll('.copy-url').forEach(function (btn) {
             } catch (e) {}
         }
     }
+})();
+
+// ============ Diagnostic de CE téléphone (app Warri Android) ============
+// Affiche ce qui se passe RÉELLEMENT sur le téléphone : SMS captés, envois au
+// serveur, dernier résultat — et dit où ça bloque, avec les boutons pour agir.
+(function () {
+    var b = window.WarriAndroid;
+    var box = document.getElementById('sms-diag');
+    if (!b || !b.isWarriApp || !box) return;
+
+    if (typeof b.smsDiag !== 'function') {
+        box.innerHTML = '<p class="hint">🔄 <strong>Mettez à jour l\'app Warri</strong> '
+            + '(réinstallez l\'APK depuis le lien) pour afficher le diagnostic SMS '
+            + 'de ce téléphone.</p>';
+        return;
+    }
+
+    var d = {};
+    try { d = JSON.parse(b.smsDiag()); } catch (e) { return; }
+    var st = 'no_endpoint';
+    try { st = b.smsStatus(); } catch (e) {}
+
+    var rows = [
+        'SMS captés par ce téléphone : <strong>' + d.captes + '</strong>'
+            + (d.dernier_sms ? ' — dernier : ' + d.dernier_sms : ''),
+        'Envois au serveur réussis : <strong>' + d.envoyes + '</strong>'
+            + (d.dernier_envoi ? ' — dernier essai : ' + d.dernier_envoi
+               + ' → ' + (d.dernier_resultat || '?') : '')
+    ];
+
+    var advice;
+    if (st === 'no_permission') {
+        advice = '🔴 <strong>Permission SMS refusée.</strong> Touchez « Autorisations '
+            + 'de l\'app » ci-dessous, puis SMS → Autoriser.';
+    } else if (st === 'no_endpoint') {
+        advice = '🟠 Lecture pas encore reliée sur ce téléphone : rouvrez l\'Accueil, '
+            + 'elle s\'active toute seule.';
+    } else if (!d.captes) {
+        advice = '🔴 <strong>Aucun SMS capté :</strong> le téléphone bloque Warri en '
+            + 'arrière-plan. Sur Xiaomi/Redmi : Réglages → Applications → Warri → '
+            + 'activez « Démarrage automatique ». Puis touchez « Batterie » ci-dessous.';
+    } else if (!d.envoyes) {
+        advice = '🟠 <strong>SMS captés mais jamais envoyés :</strong> vérifiez la '
+            + 'connexion internet de ce téléphone'
+            + (d.dernier_resultat ? ' (dernier résultat : ' + d.dernier_resultat + ')' : '') + '.';
+    } else {
+        advice = '🟢 La chaîne fonctionne sur ce téléphone : dépôts/retraits lus et transmis.';
+    }
+
+    var html = '<h3>🩺 Diagnostic de CE téléphone</h3>'
+        + '<p class="hint">' + rows.join('<br>') + '</p>'
+        + '<p class="hint">' + advice + '</p>'
+        + '<button type="button" class="btn btn-secondary" id="diag-perms">🔓 Autorisations de l\'app</button> ';
+    try {
+        if (typeof b.isIgnoringBattery === 'function' && !b.isIgnoringBattery()) {
+            html += '<button type="button" class="btn btn-secondary" id="diag-batt" '
+                + 'style="margin-top:8px">🔋 Désactiver l\'économie de batterie</button>';
+        }
+    } catch (e) {}
+    box.innerHTML = html;
+
+    var p = document.getElementById('diag-perms');
+    if (p) p.addEventListener('click', function () { try { b.openAppSettings(); } catch (e) {} });
+    var bt = document.getElementById('diag-batt');
+    if (bt) bt.addEventListener('click', function () { try { b.requestIgnoreBattery(); } catch (e) {} });
 })();
 </script>
 {% endblock %}

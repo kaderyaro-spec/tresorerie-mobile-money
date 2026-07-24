@@ -104,6 +104,34 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
         if (missing.isNotEmpty()) permsLauncher.launch(missing.toTypedArray())
+        // Sans exemption batterie, Xiaomi/Redmi & co finissent par bloquer la
+        // lecture en arrière-plan : on la demande dans la foulée.
+        requestIgnoreBattery()
+    }
+
+    /** Fiche « Infos application » de Warri (autorisations, batterie…). */
+    fun openAppSettings() {
+        try {
+            startActivity(
+                Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                       Uri.parse("package:$packageName")))
+        } catch (e: Exception) { /* réglages indisponibles : tant pis */ }
+    }
+
+    fun isIgnoringBattery(): Boolean {
+        val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        return pm.isIgnoringBatteryOptimizations(packageName)
+    }
+
+    /** Demande au système d'exempter Warri de l'économie de batterie. */
+    fun requestIgnoreBattery() {
+        try {
+            if (!isIgnoringBattery()) {
+                startActivity(
+                    Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                           Uri.parse("package:$packageName")))
+            }
+        } catch (e: Exception) { /* certains téléphones n'ont pas cet écran */ }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

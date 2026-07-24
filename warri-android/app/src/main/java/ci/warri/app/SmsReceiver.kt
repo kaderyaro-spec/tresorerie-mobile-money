@@ -21,6 +21,10 @@ class SmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
 
+        // Diagnostic : compter TOUT SMS capté, même si la lecture n'est pas
+        // encore activée (permet de voir si le téléphone bloque le récepteur).
+        Prefs.stampSmsCaptured(context)
+
         val endpoint = Prefs.getEndpoint(context)
         if (endpoint.isNullOrBlank()) return   // lecture SMS pas encore activée
 

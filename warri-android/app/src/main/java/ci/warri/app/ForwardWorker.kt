@@ -53,6 +53,7 @@ class ForwardWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params
             val code = conn.responseCode
             conn.disconnect()
 
+            Prefs.stampSendResult(applicationContext, code.toString(), code in 200..299)
             when {
                 code in 200..299 -> Result.success()
                 // Jeton refusé = appareil révoqué : on efface le lien local pour
@@ -67,6 +68,7 @@ class ForwardWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params
                 else -> Result.failure()
             }
         } catch (e: Exception) {
+            Prefs.stampSendResult(applicationContext, "erreur réseau", false)
             Result.retry()
         }
     }

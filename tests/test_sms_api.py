@@ -285,6 +285,43 @@ def test_bout_en_bout_retrait_reel_auto_cree_sur_orange(client):
     assert tx["wallet_id"] == _wallet_id("Orange Money")   # PAS Wave
 
 
+def test_activation_auto_cree_l_appareil_si_aucun(client):
+    """App Android : /api/device/auto crée « Téléphone principal » quand
+    l'agent n'a encore aucun appareil, et renvoie son lien."""
+    make_agent(client, operators="Orange Money")
+    r = client.post("/api/device/auto")
+    j = r.get_json()
+    assert r.status_code == 200 and j["ok"] is True
+    assert "api/sms?token=" in j["url"]
+    conn = db.get_db()
+    dev = conn.execute("SELECT name, token FROM sms_device WHERE agent_id=1").fetchone()
+    conn.close()
+    assert dev["name"] == "Téléphone principal"
+    assert dev["token"] in j["url"]
+
+
+def test_activation_auto_reutilise_l_appareil_existant(client):
+    """Deux appels -> le même lien (pas de doublon d'appareil)."""
+    make_agent(client, operators="Orange Money")
+    u1 = client.post("/api/device/auto").get_json()["url"]
+    u2 = client.post("/api/device/auto").get_json()["url"]
+    assert u1 == u2
+    conn = db.get_db()
+    n = conn.execute("SELECT COUNT(*) AS c FROM sms_device WHERE agent_id=1").fetchone()["c"]
+    conn.close()
+    assert n == 1
+
+
+def test_activation_auto_ambigue_si_plusieurs_appareils(client):
+    """Plusieurs téléphones : pas de choix automatique (l'agent choisit dans
+    Réglages), la route répond « multiple »."""
+    make_agent(client, operators="Orange Money")
+    _add_device_row(1, "tok-m1", None)
+    _add_device_row(1, "tok-m2", None)
+    j = client.post("/api/device/auto").get_json()
+    assert j.get("multiple") is True and "url" not in j
+
+
 def test_vrai_depot_est_conserve(client):
     make_agent(client, operators="Orange Money")
     _set_token(1, "tok-3")

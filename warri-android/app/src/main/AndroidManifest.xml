@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <!-- Notification de synchronisation (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Demander l'exemption d'économie de batterie (sinon Xiaomi/Redmi & co
+         tuent la lecture SMS en arrière-plan au bout de quelques jours) -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:allowBackup="true"

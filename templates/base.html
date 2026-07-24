@@ -65,6 +65,24 @@
       }
     </script>
     <script src="{{ url_for('static', filename='offline.js') }}?v={{ asset_v }}"></script>
+    {% if session.get('agent_id') %}
+    <script>
+      // App Warri Android : la lecture SMS s'active TOUTE SEULE, sur n'importe
+      // quelle page (obligatoire, permanent). Si ce téléphone n'est pas encore
+      // relié, on récupère (ou crée) son lien d'appareil et on l'enregistre.
+      (function () {
+        var b = window.WarriAndroid;
+        if (!b || !b.isWarriApp) return;
+        var st = 'no_endpoint';
+        try { st = b.smsStatus(); } catch (e) { return; }
+        if (st === 'ready') return;
+        fetch('/api/device/auto', { method: 'POST' })
+          .then(function (r) { return r.json(); })
+          .then(function (j) { if (j && j.url) b.setSmsEndpoint(j.url); })
+          .catch(function () {});
+      })();
+    </script>
+    {% endif %}
     {% block scripts %}{% endblock %}
 </body>
 </html>

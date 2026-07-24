@@ -33,4 +33,27 @@ class WarriBridge(private val activity: MainActivity) {
      *  (et non à un appareil révoqué). */
     @JavascriptInterface
     fun getEndpoint(): String = Prefs.getEndpoint(activity) ?: ""
+
+    /** Bilan de santé de la lecture SMS sur CE téléphone (JSON) :
+     *  SMS captés / envoyés, heure et résultat du dernier envoi. */
+    @JavascriptInterface
+    fun smsDiag(): String = Prefs.diagJson(activity)
+
+    /** Ouvre la fiche « Autorisations » de Warri dans les réglages du téléphone
+     *  (utile si la permission SMS a été refusée définitivement). */
+    @JavascriptInterface
+    fun openAppSettings() {
+        activity.runOnUiThread { activity.openAppSettings() }
+    }
+
+    /** Demande l'exemption d'économie de batterie (Xiaomi/Redmi & co tuent la
+     *  lecture SMS en arrière-plan sans cette exemption). */
+    @JavascriptInterface
+    fun requestIgnoreBattery() {
+        activity.runOnUiThread { activity.requestIgnoreBattery() }
+    }
+
+    /** Vrai si l'app est déjà exemptée de l'économie de batterie. */
+    @JavascriptInterface
+    fun isIgnoringBattery(): Boolean = activity.isIgnoringBattery()
 }

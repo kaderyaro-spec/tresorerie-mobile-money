@@ -36,6 +36,14 @@ class SmsReceiver : BroadcastReceiver() {
         val body = messages.joinToString("") { it.messageBody ?: "" }
         if (body.isBlank()) return
 
+        // Filtre expéditeur : seuls les SMS des opérateurs (+454, MobileMoney…)
+        // quittent le téléphone. Les messages personnels ne sont jamais envoyés.
+        // Les refus sont comptés (diagnostic) : rien n'est écarté en silence.
+        if (!SmsSenders.isOperator(sender)) {
+            Prefs.stampSmsIgnored(context, sender)
+            return
+        }
+
         val data = Data.Builder()
             .putString("endpoint", endpoint)
             .putString("sender", sender)

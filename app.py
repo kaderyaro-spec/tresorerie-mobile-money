@@ -79,7 +79,7 @@ app.jinja_env.filters["phone"] = fmt_phone
 # Version des fichiers statiques (CSS/JS) : à incrémenter à chaque changement.
 # Ajoutée en « ?v= » sur les liens → le navigateur recharge toujours la dernière
 # version (fini les anciens styles affichés depuis le cache de l'appareil).
-ASSET_VERSION = "51"
+ASSET_VERSION = "52"
 
 # Numéro de support affiché aux agents (fiche, page « abonnement expiré », légal).
 # Provisoire : réglable via la variable d'environnement SUPPORT_PHONE.
@@ -1254,9 +1254,14 @@ def api_sms():
 
     # Création automatique (toujours active) dès que la lecture est complète et
     # fiable : portefeuille déterminé, sens, montant ET clé anti-doublon.
+    # Expéditeur inconnu (numéro personnel, arnaque imitant un SMS d'opérateur) :
+    # jamais de création automatique. Le message reste soumis à confirmation.
+    # Si l'expéditeur n'est pas transmis (app tierce), on ne bloque pas.
+    sender_ok = (not sender) or logic.is_operator_sender(sender)
+
     status, tx_id = "pending", None
     can_auto = (parsed["type"] and parsed["amount"] and wallet_id and ref
-                and not operator_conflict)
+                and not operator_conflict and sender_ok)
     if can_auto:
         conn.close()
         tx_id, err = _save_operation(

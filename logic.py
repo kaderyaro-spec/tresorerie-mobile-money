@@ -357,6 +357,33 @@ _SENDER_HINTS = {
 # ce téléphone vient forcément d'un AUTRE opérateur.
 NO_SMS_OPERATORS = {"Wave"}
 
+# Expéditeurs légitimes des opérateurs mobile money (Côte d'Ivoire) : noms
+# d'émetteur et short-codes. Un SMS d'opération ne vient JAMAIS d'un numéro
+# personnel — un tel message est soit une arnaque, soit un message privé.
+# ⚠ Cette liste est le miroir exact de SmsSenders.kt (app Android) : toute
+# modification doit être reportée des DEUX côtés.
+_SENDER_NAME_HINTS = ("orange", "mtn", "momo", "mobilemoney", "mobile money",
+                      "moov", "flooz", "wave")
+_SENDER_SHORTCODES = ("454", "133", "155")
+
+
+def is_operator_sender(sender):
+    """
+    L'expéditeur du SMS est-il un opérateur mobile money ?
+    Tolérant sur la forme du short-code (« +454 », « 454 », « +225454 ») et sur
+    la casse du nom (« MobileMoney »). Un numéro de client complet (10 chiffres)
+    n'est jamais reconnu, même s'il se termine par un short-code.
+    """
+    s = str(sender or "").strip().lower()
+    if not s:
+        return False
+    if any(h in s for h in _SENDER_NAME_HINTS):
+        return True
+    digits = "".join(c for c in s if c.isdigit())
+    if not digits or len(digits) > 8:      # au-delà : c'est un vrai numéro
+        return False
+    return any(digits == c or digits.endswith(c) for c in _SENDER_SHORTCODES)
+
 
 def _sms_amount(token):
     """Convertit « 300000.00 », « 30 000 », « 10300.00 » → entier en F."""

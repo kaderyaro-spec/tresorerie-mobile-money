@@ -136,9 +136,10 @@
 <p class="settings-cat">Automatisation</p>
 <section class="block card-form">
     <h2>📩 Lecture automatique des SMS</h2>
-    <p class="hint">Seuls les SMS de <strong>dépôt / retrait</strong> de vos opérateurs
-       sont lus : ils créent <strong>automatiquement</strong> les transactions.
-       Les autres messages du téléphone (perso, promos, codes) sont <strong>ignorés</strong>.</p>
+    <p class="hint">Seuls les SMS de <strong>dépôt / retrait</strong> envoyés par vos
+       opérateurs (Orange <strong>+454</strong>, MTN <strong>MobileMoney</strong>…) sont lus :
+       ils créent <strong>automatiquement</strong> les transactions. Les autres messages du
+       téléphone (perso, promos, codes) <strong>ne quittent jamais l'appareil</strong>.</p>
     <p class="hint">🔒 Sécurité : une opération n'est créée seule que si l'opérateur, le sens,
        le montant <strong>et</strong> l'identifiant de transaction sont lus correctement
        (l'identifiant évite tout doublon). Sinon, elle attend votre confirmation.</p>
@@ -383,9 +384,12 @@ document.querySelectorAll('.copy-url').forEach(function (btn) {
     var st = 'no_endpoint';
     try { st = b.smsStatus(); } catch (e) {}
 
+    var ign = d.ignores || 0;
     var rows = [
         'SMS captés par ce téléphone : <strong>' + d.captes + '</strong>'
             + (d.dernier_sms ? ' — dernier : ' + d.dernier_sms : ''),
+        'Écartés (expéditeur non opérateur) : <strong>' + ign + '</strong>'
+            + (d.dernier_ignore ? ' — dernier : « ' + d.dernier_ignore + ' »' : ''),
         'Envois au serveur réussis : <strong>' + d.envoyes + '</strong>'
             + (d.dernier_envoi ? ' — dernier essai : ' + d.dernier_envoi
                + ' → ' + (d.dernier_resultat || '?') : '')
@@ -402,6 +406,11 @@ document.querySelectorAll('.copy-url').forEach(function (btn) {
         advice = '🔴 <strong>Aucun SMS capté :</strong> le téléphone bloque Warri en '
             + 'arrière-plan. Sur Xiaomi/Redmi : Réglages → Applications → Warri → '
             + 'activez « Démarrage automatique ». Puis touchez « Batterie » ci-dessous.';
+    } else if (!d.envoyes && ign >= d.captes) {
+        advice = '🟠 <strong>Tous les SMS reçus venaient d\'expéditeurs non opérateurs</strong> '
+            + '— aucun n\'a donc été transmis (c\'est normal pour des messages personnels). '
+            + 'Si un vrai SMS Orange/MTN a été écarté par erreur, signalez-nous le nom '
+            + 'd\'expéditeur affiché ci-dessus : « ' + (d.dernier_ignore || '?') + ' ».';
     } else if (!d.envoyes) {
         advice = '🟠 <strong>SMS captés mais jamais envoyés :</strong> vérifiez la '
             + 'connexion internet de ce téléphone'

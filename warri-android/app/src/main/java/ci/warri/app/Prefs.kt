@@ -16,6 +16,8 @@ object Prefs {
     private const val KEY_LAST_SMS_AT = "last_sms_at"   // heure du dernier SMS capté
     private const val KEY_LAST_SEND_AT = "last_send_at" // heure du dernier essai d'envoi
     private const val KEY_LAST_SEND_RESULT = "last_send_result" // ex. "200", "erreur réseau"
+    private const val KEY_NB_IGNORES = "nb_ignores"     // SMS écartés (expéditeur non opérateur)
+    private const val KEY_LAST_IGNORED = "last_ignored" // dernier expéditeur écarté
 
     private fun sp(ctx: Context) = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
     private fun now(): String =
@@ -33,6 +35,15 @@ object Prefs {
         s.edit()
             .putInt(KEY_NB_CAPTES, s.getInt(KEY_NB_CAPTES, 0) + 1)
             .putString(KEY_LAST_SMS_AT, now())
+            .apply()
+    }
+
+    /** Un SMS a été écarté car son expéditeur n'est pas un opérateur. */
+    fun stampSmsIgnored(ctx: Context, sender: String?) {
+        val s = sp(ctx)
+        s.edit()
+            .putInt(KEY_NB_IGNORES, s.getInt(KEY_NB_IGNORES, 0) + 1)
+            .putString(KEY_LAST_IGNORED, sender ?: "")
             .apply()
     }
 
@@ -55,7 +66,9 @@ object Prefs {
             "\"envoyes\":${s.getInt(KEY_NB_ENVOYES, 0)}," +
             "\"dernier_sms\":\"${esc(s.getString(KEY_LAST_SMS_AT, null))}\"," +
             "\"dernier_envoi\":\"${esc(s.getString(KEY_LAST_SEND_AT, null))}\"," +
-            "\"dernier_resultat\":\"${esc(s.getString(KEY_LAST_SEND_RESULT, null))}\"" +
+            "\"dernier_resultat\":\"${esc(s.getString(KEY_LAST_SEND_RESULT, null))}\"," +
+            "\"ignores\":${s.getInt(KEY_NB_IGNORES, 0)}," +
+            "\"dernier_ignore\":\"${esc(s.getString(KEY_LAST_IGNORED, null))}\"" +
             "}"
     }
 }

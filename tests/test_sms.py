@@ -77,6 +77,26 @@ def test_orange_depot_reel_terrain():
     assert r["ref"] == "CI260722.1721.A15807"
 
 
+# --- Reconnaissance de l'expéditeur (filtre « SIM marchande ») ---
+# ⚠ Ces règles sont le miroir de SmsSenders.kt (app Android).
+
+def test_expediteur_orange_reconnu_quelle_que_soit_la_forme():
+    for s in ("+454", "454", "+225454", " +454 ", "OrangeMoney", "Orange Money"):
+        assert logic.is_operator_sender(s), s
+
+
+def test_expediteur_mtn_et_moov_reconnus():
+    for s in ("MobileMoney", "mobilemoney", "MTN", "MoMo", "Moov", "Flooz"):
+        assert logic.is_operator_sender(s), s
+
+
+def test_numero_personnel_non_reconnu():
+    """Un vrai numéro de client n'est jamais un expéditeur d'opérateur —
+    même s'il se termine par « 454 » (arnaque imitant Orange)."""
+    for s in ("0708223099", "+2250708223454", "0759370788", "", None, "Papa"):
+        assert not logic.is_operator_sender(s), s
+
+
 def test_orange_alerte_non_transaction_ignoree():
     """Un message d'alerte (pas une opération) ne doit RIEN pré-remplir."""
     r = _parse("Attention Vigilance Arnaque . Nouveau Solde 135715.00 F "

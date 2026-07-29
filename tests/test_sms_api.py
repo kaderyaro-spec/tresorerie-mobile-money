@@ -322,6 +322,33 @@ def test_activation_auto_ambigue_si_plusieurs_appareils(client):
     assert j.get("multiple") is True and "url" not in j
 
 
+def test_sms_forge_depuis_un_numero_personnel_reste_en_attente(client):
+    """Anti-arnaque : un SMS parfaitement formé mais venant d'un NUMÉRO
+    PERSONNEL ne crée jamais d'opération tout seul."""
+    make_agent(client, operators="Orange Money")
+    _set_token(1, "tok-forge")
+    r = client.post("/api/sms?token=tok-forge",
+                    data={"body": ORANGE_DEPOT, "sender": "0708223099"})
+    assert r.get_json()["auto"] is False
+    assert _tx_count(1) == 0
+    conn = db.get_db()
+    row = conn.execute("SELECT status FROM sms_inbox WHERE agent_id=1").fetchone()
+    conn.close()
+    assert row["status"] == "pending"          # l'agent décide
+
+
+def test_sms_sans_expediteur_transmis_reste_accepte(client):
+    """Compatibilité : les apps tierces de transfert n'envoient pas toujours
+    l'expéditeur. Le filtre ne doit PAS bloquer dans ce cas (ici l'opérateur
+    est reconnaissable dans le texte du message)."""
+    make_agent(client, operators="Orange Money")
+    _set_token(1, "tok-noexp")
+    r = client.post("/api/sms?token=tok-noexp",
+                    data={"body": "Orange Money. " + ORANGE_DEPOT})
+    assert r.get_json()["auto"] is True
+    assert _tx_count(1) == 1
+
+
 def test_vrai_depot_est_conserve(client):
     make_agent(client, operators="Orange Money")
     _set_token(1, "tok-3")

@@ -29,7 +29,12 @@ class MainActivity : AppCompatActivity() {
 
     private val permsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { /* l'agent peut relancer depuis Réglages si refusé */ }
+    ) {
+        // L'exemption batterie se demande APRÈS la réponse à la permission SMS :
+        // lancées en même temps, la 2ᵉ fenêtre annulait la 1ʳᵉ sur beaucoup de
+        // téléphones et la permission SMS n'était jamais accordée.
+        requestIgnoreBattery()
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -103,10 +108,13 @@ class MainActivity : AppCompatActivity() {
         val missing = needed.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
-        if (missing.isNotEmpty()) permsLauncher.launch(missing.toTypedArray())
-        // Sans exemption batterie, Xiaomi/Redmi & co finissent par bloquer la
-        // lecture en arrière-plan : on la demande dans la foulée.
-        requestIgnoreBattery()
+        if (missing.isNotEmpty()) {
+            // La batterie sera demandée quand l'agent aura répondu (callback).
+            permsLauncher.launch(missing.toTypedArray())
+        } else {
+            // Permissions déjà accordées : on passe directement à la batterie.
+            requestIgnoreBattery()
+        }
     }
 
     /** Fiche « Infos application » de Warri (autorisations, batterie…). */

@@ -1,7 +1,11 @@
 __pycache__/
 *.pyc
+# Cle de signature APK : SECRETE, ne jamais publier
+cle-signature/
+*.keystore
 data.db
 data.db.bak
+budgetpro/budgetpro.db
 _unpacked/
 _specs.txt
 .claude/

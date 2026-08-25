@@ -3,6 +3,17 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+// Cle de signature PERMANENTE (fournie par le build cloud via variables
+// d'environnement). Sans elle, chaque build etait signe d'une cle jetable
+// differente -> les mises a jour refusaient de s'installer par-dessus
+// l'ancienne version (« Appli non installee »).
+def warriKeystore = System.getenv("WARRI_KEYSTORE_FILE")
+
+// Numero de version automatique : le numero du build cloud. Chaque APK est
+// ainsi identifiable (affiche dans Reglages -> Diagnostic) et Android accepte
+// la mise a jour (numero toujours croissant).
+def ciRun = (System.getenv("GITHUB_RUN_NUMBER") ?: "0") as Integer
+
 android {
     namespace 'ci.warri.app'
     compileSdk 34
@@ -11,11 +22,28 @@ android {
         applicationId "ci.warri.app"
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        versionCode ciRun > 0 ? 100 + ciRun : 1
+        versionName ciRun > 0 ? "1.0." + ciRun : "1.0-local"
+    }
+
+    signingConfigs {
+        warri {
+            if (warriKeystore != null) {
+                storeFile file(warriKeystore)
+                storePassword System.getenv("WARRI_KEYSTORE_PASSWORD")
+                keyAlias "warri"
+                keyPassword System.getenv("WARRI_KEYSTORE_PASSWORD")
+                storeType "PKCS12"
+            }
+        }
     }
 
     buildTypes {
+        debug {
+            if (warriKeystore != null) {
+                signingConfig signingConfigs.warri
+            }
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'

@@ -385,7 +385,10 @@ document.querySelectorAll('.copy-url').forEach(function (btn) {
     try { st = b.smsStatus(); } catch (e) {}
 
     var ign = d.ignores || 0;
+    var version = '';
+    try { if (typeof b.appVersion === 'function') version = b.appVersion(); } catch (e) {}
     var rows = [
+        'Version de l\'app : <strong>' + (version || 'ancienne (à mettre à jour)') + '</strong>',
         'SMS captés par ce téléphone : <strong>' + d.captes + '</strong>'
             + (d.dernier_sms ? ' — dernier : ' + d.dernier_sms : ''),
         'Écartés (expéditeur non opérateur) : <strong>' + ign + '</strong>'

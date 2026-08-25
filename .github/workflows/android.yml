@@ -32,9 +32,28 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Compiler l'APK (debug)
+      - name: Compiler l'APK (debug, signe avec la cle permanente)
         working-directory: warri-android
-        run: gradle assembleDebug --no-daemon --stacktrace
+        env:
+          WARRI_KEYSTORE_B64: ${{ secrets.WARRI_KEYSTORE_B64 }}
+          WARRI_KEYSTORE_PASSWORD: ${{ secrets.WARRI_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$WARRI_KEYSTORE_B64" ]; then
+            echo "$WARRI_KEYSTORE_B64" | base64 -d > warri-release.keystore
+            export WARRI_KEYSTORE_FILE="$PWD/warri-release.keystore"
+            echo "Cle de signature permanente : ACTIVE"
+          else
+            echo "ATTENTION : secret absent, signature jetable (mises a jour impossibles)"
+          fi
+          gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Verifier la signature (doit etre CN=Warri)
+        working-directory: warri-android
+        run: |
+          keytool -printcert -jarfile app/build/outputs/apk/debug/app-debug.apk | head -4
+          keytool -printcert -jarfile app/build/outputs/apk/debug/app-debug.apk | grep -q "CN=Warri" \
+            && echo "Signature permanente Warri : OK" \
+            || { echo "ERREUR : APK signe avec une cle jetable"; exit 1; }
 
       - name: Publier l'APK (artifact, pour les connectes GitHub)
         uses: actions/upload-artifact@v4

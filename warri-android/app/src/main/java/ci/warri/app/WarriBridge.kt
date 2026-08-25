@@ -39,6 +39,13 @@ class WarriBridge(private val activity: MainActivity) {
     @JavascriptInterface
     fun smsDiag(): String = Prefs.diagJson(activity)
 
+    /** Version de l'app installée (ex. « 1.0.42 ») — affichée dans le
+     *  diagnostic pour savoir quel APK tourne réellement chez un testeur. */
+    @JavascriptInterface
+    fun appVersion(): String = try {
+        activity.packageManager.getPackageInfo(activity.packageName, 0).versionName ?: "?"
+    } catch (e: Exception) { "?" }
+
     /** Ouvre la fiche « Autorisations » de Warri dans les réglages du téléphone
      *  (utile si la permission SMS a été refusée définitivement). */
     @JavascriptInterface
